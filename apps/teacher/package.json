@@ -1,0 +1,10 @@
+{
+  "name": "classora-teacher",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3002",
+    "build": "tsc && vite build"
+  }
+}

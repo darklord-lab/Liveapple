@@ -1,0 +1,10 @@
+{
+  "name": "classora-marketing",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3000",
+    "build": "tsc && vite build"
+  }
+}

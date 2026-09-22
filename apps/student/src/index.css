@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  body {
+    background-color: #f8fafc;
+    color: #0f172a;
+  }
+}
+
+.board-pattern-grid {
+  background-size: 24px 24px;
+  background-image: 
+    linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+    linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+}
+
+.board-pattern-dots {
+  background-size: 20px 20px;
+  background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
+}
+
+.board-pattern-ruled {
+  background-size: 100% 28px;
+  background-image: linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+}
