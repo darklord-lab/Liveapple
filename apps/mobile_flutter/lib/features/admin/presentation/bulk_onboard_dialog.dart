@@ -96,9 +96,9 @@ Dr. C. V. Raman,raman@apex.edu,+91 98765 77889''';
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.successLight.withOpacity(0.5),
+                          color: AppColors.successLight.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.success.withOpacity(0.3)),
+                          border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           children: [
@@ -135,9 +135,9 @@ Dr. C. V. Raman,raman@apex.edu,+91 98765 77889''';
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.liveRedLight.withOpacity(0.5),
+                          color: AppColors.liveRedLight.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.liveRed.withOpacity(0.3)),
+                          border: Border.all(color: AppColors.liveRed.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           children: [

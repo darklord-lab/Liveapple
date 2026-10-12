@@ -33,7 +33,7 @@ Legend: `[x]` done and proven · `[v]` reported done, needs verification on real
 - [x] 3.3 Teacher: Home tiles, Timetable (overflow fixed), Batch detail, Live Classes
 - [x] 3.4 Admin: Overview, Teachers, Batches, Fees
 - [x] 3.5 Live classroom restyle (dark Meet-like), PiP, reconnect banner
-- [ ] 3.6 Login in new style, consistency pass, overflow tests 320/360 dp
+- [x] 3.6 Login in new style, consistency pass, overflow tests 320/360 dp
 
 ## Stage 4 — New features
 - [ ] 4.1 Study Material: folders, upload (PDF/doc/link), free flag, student view/download, storage adapter, upload security tests
