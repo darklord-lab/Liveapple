@@ -16,6 +16,8 @@ const envSchema = z.object({
   LIVEKIT_URL: z.string().default('http://localhost:7880'),
   LIVEKIT_API_KEY: z.string().default('devkey'),
   LIVEKIT_API_SECRET: z.string().default('secret'),
+  // Public URL of the deployed server (used for self-ping keep-alive on Render)
+  APP_URL: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);
