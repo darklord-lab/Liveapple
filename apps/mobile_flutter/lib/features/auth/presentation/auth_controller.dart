@@ -53,6 +53,7 @@ class AuthController extends StateNotifier<AuthState> {
     required String password,
     String? name,
     String? phone,
+    String? email,
   }) async {
     state = AuthState.loading();
     try {
@@ -61,6 +62,7 @@ class AuthController extends StateNotifier<AuthState> {
         password: password,
         name: name,
         phone: phone,
+        email: email,
       );
       state = AuthState.authenticated(user);
       return true;

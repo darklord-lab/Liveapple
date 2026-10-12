@@ -394,11 +394,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                   const SizedBox(height: 20),
 
-                  // Accept Invite CTA
+                  // Accept Invite or Join Batch CTA
                   OutlinedButton.icon(
                     onPressed: () => context.push('/accept-invite'),
-                    icon: const Icon(Icons.card_giftcard_outlined, size: 18),
-                    label: const Text('Have an invite code? Accept Invite'),
+                    icon: const Icon(Icons.school_outlined, size: 18),
+                    label: const Text('Have an Invite or Batch Code? Join Here'),
                   ),
 
                   const SizedBox(height: 32),

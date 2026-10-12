@@ -59,6 +59,7 @@ class AuthRepository {
     required String password,
     String? name,
     String? phone,
+    String? email,
   }) async {
     try {
       final response = await _apiClient.dio.post(
@@ -66,6 +67,7 @@ class AuthRepository {
         data: {
           'inviteCode': inviteCode.trim(),
           'password': password,
+          if (email != null && email.isNotEmpty) 'email': email.trim(),
           if (name != null && name.isNotEmpty) 'name': name.trim(),
           if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
         },

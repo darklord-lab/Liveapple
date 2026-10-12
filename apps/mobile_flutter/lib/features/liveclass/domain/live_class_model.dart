@@ -36,7 +36,7 @@ class LiveClassModel {
       teacherId: json['teacherId'] as String? ?? json['teacher']?['id'] as String?,
       teacherName: json['teacher']?['name'] as String?,
       title: json['title'] as String,
-      scheduledAt: DateTime.parse(json['scheduledAt'] as String),
+      scheduledAt: DateTime.parse(json['scheduledAt'] as String).toLocal(),
       status: json['status'] as String? ?? 'SCHEDULED',
       livekitRoom: json['livekitRoom'] as String? ?? '',
       recordingUrl: json['recordingUrl'] as String?,
@@ -48,24 +48,45 @@ class LiveClassModel {
   bool get isScheduled => status.toUpperCase() == 'SCHEDULED';
   bool get isEnded => status.toUpperCase() == 'ENDED';
 
+  DateTime get localTime => scheduledAt.toLocal();
+
   String get formattedDate {
     final now = DateTime.now();
-    final isToday = scheduledAt.year == now.year && scheduledAt.month == now.month && scheduledAt.day == now.day;
-    final isTomorrow = scheduledAt.year == now.year && scheduledAt.month == now.month && scheduledAt.day == now.day + 1;
+    final local = localTime;
+    final isToday = local.year == now.year && local.month == now.month && local.day == now.day;
+    final tomorrow = now.add(const Duration(days: 1));
+    final isTomorrow = local.year == tomorrow.year && local.month == tomorrow.month && local.day == tomorrow.day;
 
     if (isToday) return 'Today';
     if (isTomorrow) return 'Tomorrow';
 
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '${scheduledAt.day} ${months[scheduledAt.month - 1]}';
+    return '${local.day} ${months[local.month - 1]}';
   }
 
   String get formattedTime {
-    final hour = scheduledAt.hour;
-    final minute = scheduledAt.minute;
+    final local = localTime;
+    final hour = local.hour;
+    final minute = local.minute;
     final ampm = hour >= 12 ? 'PM' : 'AM';
     final formattedHour = hour % 12 == 0 ? 12 : hour % 12;
     final formattedMin = minute < 10 ? '0$minute' : '$minute';
     return '$formattedHour:$formattedMin $ampm';
+  }
+
+  String get timeUntilText {
+    final diff = localTime.difference(DateTime.now());
+    if (diff.isNegative) {
+      if (isLive) return '🔴 LIVE NOW';
+      return 'Class in progress';
+    }
+    if (diff.inHours > 0) {
+      final mins = diff.inMinutes % 60;
+      return 'Starts in ${diff.inHours}h ${mins > 0 ? '$mins m' : ''}';
+    }
+    if (diff.inMinutes > 0) {
+      return 'Starts in ${diff.inMinutes} mins';
+    }
+    return 'Starting soon';
   }
 }

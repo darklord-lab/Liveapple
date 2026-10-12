@@ -15,6 +15,7 @@ class AcceptInviteScreen extends ConsumerStatefulWidget {
 class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
   final _formKey = GlobalKey<FormState>();
   final _codeController = TextEditingController();
+  final _emailController = TextEditingController();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -23,6 +24,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
   @override
   void dispose() {
     _codeController.dispose();
+    _emailController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
@@ -34,6 +36,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
       ref.read(authStateProvider.notifier).acceptInvite(
             inviteCode: _codeController.text.trim(),
             password: _passwordController.text,
+            email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null,
             name: _nameController.text.trim(),
             phone: _phoneController.text.trim(),
           );
@@ -48,7 +51,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Accept Invitation'),
+        title: const Text('Join Batch or Institute'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
@@ -64,13 +67,13 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Icon(
-                    Icons.mark_email_read_outlined,
+                    Icons.school_outlined,
                     size: 48,
                     color: AppColors.primary,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Join Your Institute',
+                    'Join Your Batch',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 22,
@@ -80,7 +83,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Enter the 32-character invite code shared by your institute admin or teacher',
+                    'Enter the Batch Code (e.g. MATH12) or Invite Code shared by your teacher',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 13,
@@ -125,12 +128,12 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
                         TextFormField(
                           controller: _codeController,
                           decoration: const InputDecoration(
-                            labelText: 'Invite Code',
-                            hintText: 'e.g. 7f9a8b1c...',
+                            labelText: 'Batch Code or Invite Code',
+                            hintText: 'e.g. MATH-2024 or Invite Token',
                             prefixIcon: Icon(Icons.vpn_key_outlined),
                           ),
                           validator: (val) {
-                            if (val == null || val.trim().isEmpty) return 'Invite code is required';
+                            if (val == null || val.trim().isEmpty) return 'Batch or Invite code is required';
                             return null;
                           },
                         ),
@@ -138,13 +141,23 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
                         TextFormField(
                           controller: _nameController,
                           decoration: const InputDecoration(
-                            labelText: 'Full Name',
+                            labelText: 'Student Full Name',
                             prefixIcon: Icon(Icons.person_outline),
                           ),
                           validator: (val) {
                             if (val == null || val.trim().isEmpty) return 'Name is required';
                             return null;
                           },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'Email Address (Optional)',
+                            hintText: 'student@example.com',
+                            prefixIcon: Icon(Icons.email_outlined),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -194,7 +207,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen> {
                                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                   ),
                                 )
-                              : const Text('Accept & Create Account', style: TextStyle(fontSize: 15)),
+                              : const Text('Join Batch & Start Learning', style: TextStyle(fontSize: 15)),
                         ),
                       ],
                     ),

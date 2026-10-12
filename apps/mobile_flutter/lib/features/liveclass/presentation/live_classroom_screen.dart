@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
+import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../domain/live_class_model.dart';
@@ -1259,10 +1260,36 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
             ),
             const SizedBox(height: 10),
             _buildDocOptionTile(
-              icon: Icons.upload_file,
+              icon: Icons.folder_open_rounded,
               color: AppColors.skyBlue,
-              title: 'Upload Custom PDF / PPT From Device',
-              subtitle: 'Choose local document or enter Cloud / Drive Link',
+              title: 'Choose PDF / PPT From Device',
+              subtitle: 'Select presentation file directly from phone storage',
+              onTap: () async {
+                Navigator.pop(ctx);
+                try {
+                  final result = await FilePicker.platform.pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: ['pdf', 'ppt', 'pptx'],
+                  );
+                  if (result != null && result.files.isNotEmpty) {
+                    final pickedFile = result.files.first;
+                    setState(() {
+                      _isDocPresenterOpen = true;
+                      _currentDocTitle = pickedFile.name;
+                      _currentSlideNumber = 1;
+                    });
+                  }
+                } catch (e) {
+                  _showCustomDocLinkDialog();
+                }
+              },
+            ),
+            const SizedBox(height: 10),
+            _buildDocOptionTile(
+              icon: Icons.link_rounded,
+              color: Colors.purpleAccent,
+              title: 'Enter Cloud / Drive Link',
+              subtitle: 'Present via web URL or Google Drive link',
               onTap: () {
                 Navigator.pop(ctx);
                 _showCustomDocLinkDialog();
@@ -1321,45 +1348,101 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
   }
 
   void _showCustomDocLinkDialog() {
-    final controller = TextEditingController(text: 'https://classora.edu/materials/jee-chapter38-slides.pptx');
+    final controller = TextEditingController();
+    String? selectedFileName;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Present Custom Document', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Enter PDF / PPT URL or choose file:', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: controller,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                hintText: 'https://...',
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Row(
+            children: [
+              Icon(Icons.file_present_rounded, color: AppColors.skyBlue, size: 22),
+              SizedBox(width: 8),
+              Text('Present Document', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Direct File Picker CTA
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: AppColors.skyBlue),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.folder_open, color: AppColors.skyBlue),
+                label: Text(
+                  selectedFileName ?? 'Select PDF / PPT From Device Storage',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onPressed: () async {
+                  try {
+                    final result = await FilePicker.platform.pickFiles(
+                      type: FileType.custom,
+                      allowedExtensions: ['pdf', 'ppt', 'pptx'],
+                    );
+                    if (result != null && result.files.isNotEmpty) {
+                      setDialogState(() {
+                        selectedFileName = result.files.first.name;
+                        controller.text = result.files.first.name;
+                      });
+                    }
+                  } catch (_) {}
+                },
               ),
+              const SizedBox(height: 14),
+              const Row(
+                children: [
+                  Expanded(child: Divider(color: Color(0xFF334155))),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('OR VIA LINK', style: TextStyle(color: AppColors.slate500, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                  Expanded(child: Divider(color: Color(0xFF334155))),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text('Enter PDF / PPT Web Link (Optional):', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: controller,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'https://... (or leave empty if file chosen)',
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: AppColors.slate400))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
+              onPressed: () {
+                final chosen = selectedFileName ?? controller.text.trim();
+                if (chosen.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please select a file or enter a link')),
+                  );
+                  return;
+                }
+                Navigator.pop(ctx);
+                setState(() {
+                  _isDocPresenterOpen = true;
+                  _currentDocTitle = chosen.split('/').last;
+                  _currentSlideNumber = 1;
+                });
+              },
+              child: const Text('Start Presenting'),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() {
-                _isDocPresenterOpen = true;
-                _currentDocTitle = controller.text.trim().isNotEmpty
-                    ? controller.text.trim().split('/').last
-                    : 'Custom Presentation.pdf';
-                _currentSlideNumber = 1;
-              });
-            },
-            child: const Text('Start Presenting'),
-          ),
-        ],
       ),
     );
   }

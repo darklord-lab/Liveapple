@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../batch/presentation/batch_controller.dart';
@@ -20,12 +21,12 @@ class AssignmentsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Assignments & Homework', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Assignments & Study Materials', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           if (canCreate)
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
-              tooltip: 'Upload / Create Assignment',
+              tooltip: 'Upload / Create Assignment or Notes',
               onPressed: () => _showCreateAssignmentDialog(context, ref),
             ),
           IconButton(
@@ -38,7 +39,7 @@ class AssignmentsScreen extends ConsumerWidget {
           ? FloatingActionButton.extended(
               backgroundColor: AppColors.skyBlue,
               icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('Create Assignment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              label: const Text('Upload Notes / Assignment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               onPressed: () => _showCreateAssignmentDialog(context, ref),
             )
           : null,
@@ -259,23 +260,93 @@ class AssignmentsScreen extends ConsumerWidget {
     }
 
     String selectedBatchId = batches.first.id;
+    bool isStudyNotes = false;
     final titleController = TextEditingController();
     final descController = TextEditingController();
-    final urlController = TextEditingController(text: 'https://classora.edu/docs/jee-assignment-01.pdf');
+    final urlController = TextEditingController();
     final marksController = TextEditingController(text: '100');
     DateTime selectedDueDate = DateTime.now().add(const Duration(days: 7));
+    String? pickedFileName;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF1E293B),
-          title: const Text('Create & Upload Assignment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          title: Row(
+            children: [
+              Icon(isStudyNotes ? Icons.menu_book_rounded : Icons.assignment_outlined, color: AppColors.skyBlue, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                isStudyNotes ? 'Upload Study Material / Notes' : 'Create & Upload Assignment',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Type selector: Assignment vs Notes/Material
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setDialogState(() => isStudyNotes = false),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: !isStudyNotes ? AppColors.skyBlue : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Assignment / HW',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: !isStudyNotes ? Colors.white : AppColors.slate400,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setDialogState(() => isStudyNotes = true),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isStudyNotes ? AppColors.skyBlue : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Notes & Materials',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: isStudyNotes ? Colors.white : AppColors.slate400,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
                 const Text('Select Cohort Batch', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
                 const SizedBox(height: 4),
                 DropdownButtonFormField<String>(
@@ -295,96 +366,166 @@ class AssignmentsScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
 
-                const Text('Assignment Title', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
+                Text(isStudyNotes ? 'Title / Chapter Name' : 'Assignment Title', style: const TextStyle(color: AppColors.slate400, fontSize: 12)),
                 const SizedBox(height: 4),
                 TextField(
                   controller: titleController,
                   style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    hintText: 'e.g., Electromagnetic Induction Problem Set #2',
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: InputDecoration(
+                    hintText: isStudyNotes ? 'e.g., Electromagnetic Induction Chapter Notes' : 'e.g., Problem Set #2',
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                 ),
                 const SizedBox(height: 12),
 
-                const Text('Instructions / Description', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
+                Text(isStudyNotes ? 'Notes / Description (Text is sufficient)' : 'Instructions / Description', style: const TextStyle(color: AppColors.slate400, fontSize: 12)),
                 const SizedBox(height: 4),
                 TextField(
                   controller: descController,
                   style: const TextStyle(color: Colors.white),
                   maxLines: 3,
-                  decoration: const InputDecoration(
-                    hintText: 'Detailed guidelines, submission criteria...',
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: InputDecoration(
+                    hintText: isStudyNotes ? 'Key formulas, chapter summary, important tips...' : 'Detailed guidelines, submission criteria...',
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
 
-                const Text('PDF / Document Resource Link', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
-                const SizedBox(height: 4),
-                TextField(
-                  controller: urlController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    hintText: 'https://...',
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
+                // File Attachment Section (Optional)
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Max Marks', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
-                          const SizedBox(height: 4),
-                          TextField(
-                            controller: marksController,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            ),
-                          ),
-                        ],
-                      ),
+                    Text(
+                      isStudyNotes ? 'Attach PDF / Doc (Optional)' : 'Attach Resource File (Optional)',
+                      style: const TextStyle(color: AppColors.slate400, fontSize: 12),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Due Date', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
-                          const SizedBox(height: 4),
-                          OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              side: const BorderSide(color: Color(0xFF334155)),
-                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                            ),
-                            onPressed: () async {
-                              final picked = await showDatePicker(
-                                context: ctx,
-                                initialDate: selectedDueDate,
-                                firstDate: DateTime.now(),
-                                lastDate: DateTime.now().add(const Duration(days: 365)),
-                              );
-                              if (picked != null) {
-                                setDialogState(() => selectedDueDate = picked);
-                              }
-                            },
-                            child: Text(
-                              DateFormat('dd MMM yyyy').format(selectedDueDate),
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    const Text('Not Mandatory', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                   ],
                 ),
+                const SizedBox(height: 6),
+
+                // Device File Picker CTA
+                InkWell(
+                  onTap: () async {
+                    try {
+                      final result = await FilePicker.platform.pickFiles(
+                        type: FileType.custom,
+                        allowedExtensions: ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'jpg', 'png'],
+                      );
+                      if (result != null && result.files.isNotEmpty) {
+                        setDialogState(() {
+                          pickedFileName = result.files.first.name;
+                          urlController.text = result.files.first.name;
+                        });
+                      }
+                    } catch (_) {}
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: pickedFileName != null ? AppColors.skyBlue : const Color(0xFF334155)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(pickedFileName != null ? Icons.check_circle : Icons.folder_open, color: pickedFileName != null ? Colors.greenAccent : AppColors.skyBlue, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            pickedFileName ?? 'Choose File From Device Storage',
+                            style: TextStyle(
+                              color: pickedFileName != null ? Colors.white : AppColors.slate400,
+                              fontSize: 12,
+                              fontWeight: pickedFileName != null ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (pickedFileName != null)
+                          GestureDetector(
+                            onTap: () => setDialogState(() {
+                              pickedFileName = null;
+                              urlController.clear();
+                            }),
+                            child: const Icon(Icons.close, color: AppColors.slate400, size: 18),
+                          )
+                        else
+                          const Icon(Icons.arrow_forward_ios, color: AppColors.slate500, size: 12),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Web Link Input as secondary alternative
+                TextField(
+                  controller: urlController,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: const InputDecoration(
+                    labelText: 'Or Web / Drive Link (Optional)',
+                    hintText: 'https://...',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                if (!isStudyNotes) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Max Marks', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            TextField(
+                              controller: marksController,
+                              keyboardType: TextInputType.number,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: const InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Due Date', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Color(0xFF334155)),
+                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                              ),
+                              onPressed: () async {
+                                final picked = await showDatePicker(
+                                  context: ctx,
+                                  initialDate: selectedDueDate,
+                                  firstDate: DateTime.now(),
+                                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() => selectedDueDate = picked);
+                                }
+                              },
+                              child: Text(
+                                DateFormat('dd MMM yyyy').format(selectedDueDate),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -396,38 +537,47 @@ class AssignmentsScreen extends ConsumerWidget {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
               onPressed: () async {
-                if (titleController.text.trim().isEmpty || descController.text.trim().isEmpty) {
+                if (titleController.text.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter both title and description')),
+                    const SnackBar(content: Text('Please enter a title')),
                   );
                   return;
                 }
 
+                final chosenAttachment = pickedFileName ?? (urlController.text.trim().isNotEmpty ? urlController.text.trim() : null);
+
                 try {
                   await ref.read(learningRepositoryProvider).createAssignment(
                     batchId: selectedBatchId,
-                    title: titleController.text.trim(),
-                    description: descController.text.trim(),
-                    dueDate: selectedDueDate,
-                    attachmentUrl: urlController.text.trim().isNotEmpty ? urlController.text.trim() : null,
-                    maxMarks: int.tryParse(marksController.text.trim()) ?? 100,
+                    title: isStudyNotes
+                        ? '[Notes] ${titleController.text.trim()}'
+                        : titleController.text.trim(),
+                    description: descController.text.trim().isNotEmpty
+                        ? descController.text.trim()
+                        : (isStudyNotes ? 'Chapter Study Material' : 'Assignment details'),
+                    dueDate: isStudyNotes ? DateTime.now().add(const Duration(days: 365)) : selectedDueDate,
+                    attachmentUrl: chosenAttachment,
+                    maxMarks: isStudyNotes ? 0 : (int.tryParse(marksController.text.trim()) ?? 100),
                   );
                   ref.invalidate(assignmentsProvider);
                   if (ctx.mounted) Navigator.pop(ctx);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Assignment uploaded and assigned successfully!'), backgroundColor: AppColors.success),
+                      SnackBar(
+                        content: Text(isStudyNotes ? 'Study Material & Notes published successfully!' : 'Assignment published successfully!'),
+                        backgroundColor: AppColors.success,
+                      ),
                     );
                   }
                 } catch (e) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to create assignment: $e'), backgroundColor: AppColors.error),
+                      SnackBar(content: Text('Failed to publish: $e'), backgroundColor: AppColors.error),
                     );
                   }
                 }
               },
-              child: const Text('Publish Assignment'),
+              child: Text(isStudyNotes ? 'Publish Notes / Material' : 'Publish Assignment'),
             ),
           ],
         ),

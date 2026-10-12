@@ -957,15 +957,19 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.skyBlueLight,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text('NEXT CLASS', style: TextStyle(color: AppColors.skyBlue, fontWeight: FontWeight.bold, fontSize: 10)),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.skyBlueLight,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(cls.timeUntilText, style: const TextStyle(color: AppColors.skyBlue, fontWeight: FontWeight.bold, fontSize: 11)),
+                  ),
+                ],
               ),
-              Text('${cls.formattedDate} • ${cls.formattedTime}', style: const TextStyle(fontSize: 11, color: AppColors.slate500)),
+              Text('${cls.formattedDate} • ${cls.formattedTime} IST', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.slate500)),
             ],
           ),
           const SizedBox(height: 10),
