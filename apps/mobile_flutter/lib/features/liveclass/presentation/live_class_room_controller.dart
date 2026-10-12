@@ -106,6 +106,7 @@ class LiveClassRoomState {
   final List<InClassPollItem> polls;
   final bool isHandRaised;
   final bool isClassEnded;
+  final bool isRoomLocked;
   final lk.LocalVideoTrack? localVideoTrack;
   final lk.LocalAudioTrack? localAudioTrack;
   final Map<String, lk.VideoTrack> remoteVideoTracks;
@@ -133,6 +134,7 @@ class LiveClassRoomState {
     this.polls = const [],
     this.isHandRaised = false,
     this.isClassEnded = false,
+    this.isRoomLocked = false,
     this.localVideoTrack,
     this.localAudioTrack,
     this.remoteVideoTracks = const {},
@@ -161,6 +163,7 @@ class LiveClassRoomState {
     List<InClassPollItem>? polls,
     bool? isHandRaised,
     bool? isClassEnded,
+    bool? isRoomLocked,
     lk.LocalVideoTrack? localVideoTrack,
     lk.LocalAudioTrack? localAudioTrack,
     Map<String, lk.VideoTrack>? remoteVideoTracks,
@@ -190,6 +193,7 @@ class LiveClassRoomState {
       polls: polls ?? this.polls,
       isHandRaised: isHandRaised ?? this.isHandRaised,
       isClassEnded: isClassEnded ?? this.isClassEnded,
+      isRoomLocked: isRoomLocked ?? this.isRoomLocked,
       localVideoTrack: clearLocalVideo ? null : (localVideoTrack ?? this.localVideoTrack),
       localAudioTrack: clearLocalAudio ? null : (localAudioTrack ?? this.localAudioTrack),
       remoteVideoTracks: remoteVideoTracks ?? this.remoteVideoTracks,
@@ -794,13 +798,23 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
 
   void grantBoardToStudent(String studentId) {
     if (state.isHost && _currentClassId != null) {
+      _socket?.emit('board:permission:grant', {'classId': _currentClassId, 'studentId': studentId});
       _socket?.emit('board:grant', {'classId': _currentClassId, 'studentId': studentId});
     }
   }
 
   void revokeBoardFromStudent(String studentId) {
     if (state.isHost && _currentClassId != null) {
+      _socket?.emit('board:permission:revoke', {'classId': _currentClassId, 'studentId': studentId});
       _socket?.emit('board:revoke', {'classId': _currentClassId, 'studentId': studentId});
+    }
+  }
+
+  void toggleLockRoom() {
+    final next = !state.isRoomLocked;
+    state = state.copyWith(isRoomLocked: next);
+    if (_currentClassId != null && state.isHost) {
+      _socket?.emit('room:lock', {'classId': _currentClassId, 'isLocked': next});
     }
   }
 
