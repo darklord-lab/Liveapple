@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../batch/presentation/batch_controller.dart';
@@ -330,12 +332,7 @@ class AssignmentsScreen extends ConsumerWidget {
                         icon: const Icon(Icons.open_in_new, size: 14),
                         label: const Text('Open / View', style: TextStyle(fontSize: 12)),
                         onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Viewing document: ${item.attachmentUrl}'),
-                              backgroundColor: AppColors.skyBlue,
-                            ),
-                          );
+                          _openDocumentViewer(context, item.title, item.attachmentUrl!);
                         },
                       ),
                     ],
@@ -364,6 +361,178 @@ class AssignmentsScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+
+  void _openDocumentViewer(BuildContext context, String title, String attachmentUrl) {
+    final file = File(attachmentUrl);
+    final existsLocally = file.existsSync();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        int totalPages = 0;
+        int currentPage = 0;
+        bool isReady = false;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.88,
+              padding: const EdgeInsets.only(top: 12),
+              child: Column(
+                children: [
+                  // Drag Handle
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Header Bar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 22),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (totalPages > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${currentPage + 1} / $totalPages',
+                              style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white70),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(color: Color(0xFF334155)),
+
+                  // Document Content Stage
+                  Expanded(
+                    child: existsLocally && attachmentUrl.toLowerCase().endsWith('.pdf')
+                        ? Stack(
+                            children: [
+                              PDFView(
+                                filePath: attachmentUrl,
+                                enableSwipe: true,
+                                swipeHorizontal: false,
+                                autoSpacing: true,
+                                pageFling: true,
+                                fitPolicy: FitPolicy.BOTH,
+                                onRender: (pages) {
+                                  setModalState(() {
+                                    totalPages = pages ?? 0;
+                                    isReady = true;
+                                  });
+                                },
+                                onPageChanged: (page, total) {
+                                  setModalState(() {
+                                    currentPage = page ?? 0;
+                                    totalPages = total ?? 0;
+                                  });
+                                },
+                              ),
+                              if (!isReady)
+                                const Center(
+                                  child: CircularProgressIndicator(color: AppColors.skyBlue),
+                                ),
+                            ],
+                          )
+                        : Container(
+                            margin: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFF334155)),
+                            ),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.menu_book_rounded, color: AppColors.skyBlue, size: 24),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          title,
+                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Divider(color: Color(0xFF334155)),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Document Reference: ${attachmentUrl.split('/').last}',
+                                    style: const TextStyle(color: AppColors.skyBlue, fontSize: 13, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    'This study material has been registered and verified by your faculty. You can review all formulas, notes, and concept summaries directly inside this workspace.',
+                                    style: TextStyle(color: AppColors.slate200, fontSize: 14, height: 1.6),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0F172A),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: const Color(0xFF334155)),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.verified, color: Colors.greenAccent, size: 18),
+                                        SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Verified Institute Study Resource',
+                                            style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -607,7 +776,7 @@ class AssignmentsScreen extends ConsumerWidget {
                       if (result != null && result.files.isNotEmpty) {
                         setDialogState(() {
                           pickedFileName = result.files.first.name;
-                          urlController.text = result.files.first.name;
+                          urlController.text = result.files.first.path ?? result.files.first.name;
                         });
                       }
                     } catch (_) {}

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../domain/live_class_model.dart';
@@ -36,9 +37,14 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
 
   // Live PPT / PDF Document Presenter State (User Feature Request)
   bool _isDocPresenterOpen = false;
+  String? _pickedPdfPath;
   String _currentDocTitle = 'Electromagnetic Induction — Lecture Slides.pptx';
   int _currentSlideNumber = 1;
   final int _totalSlides = 8;
+  int _pdfTotalPages = 0;
+  int _pdfCurrentPage = 0;
+  PDFViewController? _pdfViewController;
+  bool _pdfIsReady = false;
 
   // In-Class Device Session Recording State (Teacher & Student)
   bool _isRecording = false;
@@ -775,8 +781,8 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
 
             // Main Stage Area (Document Presenter, Whiteboard, or Video Feeds)
             Expanded(
-              child: _isDocPresenterOpen
-                  ? _buildDocumentPresentationStage()
+              child: (roomState.isHost ? _isDocPresenterOpen : roomState.isDocPresenting)
+                  ? _buildDocumentPresentationStage(roomState)
                   : roomState.isWhiteboardOpen
                       ? DigitalBoard(isTeacher: roomState.isHost || roomState.isBoardAllowed)
                       : _buildVideoStage(roomState),
@@ -1190,28 +1196,31 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
               onTap: () => ref.read(liveClassRoomProvider.notifier).toggleCamera(),
             ),
 
-            // Digital Whiteboard
-            _buildControlButton(
-              icon: Icons.draw_outlined,
-              label: roomState.isWhiteboardOpen ? 'Close Board' : 'Board',
-              isActive: roomState.isWhiteboardOpen,
-              color: roomState.isWhiteboardOpen ? AppColors.primary : AppColors.slate100,
-              onTap: () {
-                if (_isDocPresenterOpen) {
-                  setState(() => _isDocPresenterOpen = false);
-                }
-                ref.read(liveClassRoomProvider.notifier).toggleWhiteboard();
-              },
-            ),
+            // Teacher-Only Presentation Controls (Digital Board & PPT/PDF)
+            if (roomState.isHost) ...[
+              // Digital Whiteboard
+              _buildControlButton(
+                icon: Icons.draw_outlined,
+                label: roomState.isWhiteboardOpen ? 'Close Board' : 'Board',
+                isActive: roomState.isWhiteboardOpen,
+                color: roomState.isWhiteboardOpen ? AppColors.primary : AppColors.slate100,
+                onTap: () {
+                  if (_isDocPresenterOpen) {
+                    _closePresentation();
+                  }
+                  ref.read(liveClassRoomProvider.notifier).toggleWhiteboard();
+                },
+              ),
 
-            // PPT / PDF Presentation Button
-            _buildControlButton(
-              icon: Icons.picture_as_pdf_outlined,
-              label: _isDocPresenterOpen ? 'Close Doc' : 'PPT / PDF',
-              isActive: _isDocPresenterOpen,
-              color: _isDocPresenterOpen ? AppColors.skyBlue : AppColors.slate100,
-              onTap: _toggleDocPresenter,
-            ),
+              // PPT / PDF Presentation Button
+              _buildControlButton(
+                icon: Icons.picture_as_pdf_outlined,
+                label: _isDocPresenterOpen ? 'Close Doc' : 'PPT / PDF',
+                isActive: _isDocPresenterOpen,
+                color: _isDocPresenterOpen ? AppColors.skyBlue : AppColors.slate100,
+                onTap: _toggleDocPresenter,
+              ),
+            ],
 
             // Chat Button with Unread Badge
             Stack(
@@ -1325,9 +1334,17 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
   /* -------------------------------------------------------------------------- */
   /* PPT / PDF LIVE DOCUMENT PRESENTER (User Feature Request)                  */
   /* -------------------------------------------------------------------------- */
+  void _closePresentation() {
+    setState(() {
+      _isDocPresenterOpen = false;
+      _pickedPdfPath = null;
+    });
+    ref.read(liveClassRoomProvider.notifier).setDocPresentation(isOpen: false);
+  }
+
   void _toggleDocPresenter() {
     if (_isDocPresenterOpen) {
-      setState(() => _isDocPresenterOpen = false);
+      _closePresentation();
     } else {
       _showDocPickerSheet();
     }
@@ -1417,9 +1434,17 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                     final pickedFile = result.files.first;
                     setState(() {
                       _isDocPresenterOpen = true;
+                      _pickedPdfPath = pickedFile.path;
                       _currentDocTitle = pickedFile.name;
+                      _pdfCurrentPage = 0;
                       _currentSlideNumber = 1;
+                      _pdfIsReady = false;
                     });
+                    ref.read(liveClassRoomProvider.notifier).setDocPresentation(
+                      isOpen: true,
+                      title: pickedFile.name,
+                      page: 1,
+                    );
                   }
                 } catch (e) {
                   _showCustomDocLinkDialog();
@@ -1589,7 +1614,18 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
     );
   }
 
-  Widget _buildDocumentPresentationStage() {
+  Widget _buildDocumentPresentationStage(LiveClassRoomState roomState) {
+    final isTeacher = roomState.isHost;
+    final displayTitle = isTeacher
+        ? _currentDocTitle
+        : (roomState.docTitle.isNotEmpty ? roomState.docTitle : _currentDocTitle);
+    final currentPageNum = _pickedPdfPath != null
+        ? (_pdfCurrentPage + 1)
+        : (isTeacher ? _currentSlideNumber : roomState.docPage);
+    final totalPageNum = _pickedPdfPath != null
+        ? (_pdfTotalPages > 0 ? _pdfTotalPages : 1)
+        : _totalSlides;
+
     return Container(
       color: const Color(0xFF0F172A),
       child: Column(
@@ -1604,25 +1640,31 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
             child: Row(
               children: [
                 Icon(
-                  _currentDocTitle.endsWith('.pdf') ? Icons.picture_as_pdf : Icons.slideshow_rounded,
-                  color: _currentDocTitle.endsWith('.pdf') ? Colors.redAccent : Colors.orangeAccent,
+                  displayTitle.toLowerCase().endsWith('.pdf') ? Icons.picture_as_pdf : Icons.slideshow_rounded,
+                  color: displayTitle.toLowerCase().endsWith('.pdf') ? Colors.redAccent : Colors.orangeAccent,
                   size: 20,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    _currentDocTitle,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        displayTitle,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (!isTeacher)
+                        const Text(
+                          'Teacher is presenting live',
+                          style: TextStyle(color: AppColors.skyBlue, fontSize: 10, fontWeight: FontWeight.w600),
+                        ),
+                    ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_left, color: Colors.white, size: 22),
-                  tooltip: 'Previous Slide',
-                  onPressed: _currentSlideNumber > 1
-                      ? () => setState(() => _currentSlideNumber--)
-                      : null,
-                ),
+
+                // Page indicator
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
@@ -1631,32 +1673,82 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                     border: Border.all(color: const Color(0xFF334155)),
                   ),
                   child: Text(
-                    '$_currentSlideNumber / $_totalSlides',
+                    '$currentPageNum / $totalPageNum',
                     style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right, color: Colors.white, size: 22),
-                  tooltip: 'Next Slide',
-                  onPressed: _currentSlideNumber < _totalSlides
-                      ? () => setState(() => _currentSlideNumber++)
-                      : null,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.folder_open, color: AppColors.skyBlue, size: 20),
-                  tooltip: 'Switch Document',
-                  onPressed: _showDocPickerSheet,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, color: AppColors.liveRed, size: 20),
-                  tooltip: 'Close Presentation',
-                  onPressed: () => setState(() => _isDocPresenterOpen = false),
-                ),
+
+                if (isTeacher) ...[
+                  // Previous Page/Slide button
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left, color: Colors.white, size: 22),
+                    tooltip: 'Previous',
+                    onPressed: _pickedPdfPath != null
+                        ? (_pdfCurrentPage > 0
+                            ? () {
+                                _pdfViewController?.setPage(_pdfCurrentPage - 1);
+                                setState(() => _pdfCurrentPage--);
+                                ref.read(liveClassRoomProvider.notifier).setDocPresentation(
+                                  isOpen: true,
+                                  title: _currentDocTitle,
+                                  page: _pdfCurrentPage + 1,
+                                );
+                              }
+                            : null)
+                        : (_currentSlideNumber > 1
+                            ? () {
+                                setState(() => _currentSlideNumber--);
+                                ref.read(liveClassRoomProvider.notifier).setDocPresentation(
+                                  isOpen: true,
+                                  title: _currentDocTitle,
+                                  page: _currentSlideNumber,
+                                );
+                              }
+                            : null),
+                  ),
+                  // Next Page/Slide button
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right, color: Colors.white, size: 22),
+                    tooltip: 'Next',
+                    onPressed: _pickedPdfPath != null
+                        ? (_pdfCurrentPage < _pdfTotalPages - 1
+                            ? () {
+                                _pdfViewController?.setPage(_pdfCurrentPage + 1);
+                                setState(() => _pdfCurrentPage++);
+                                ref.read(liveClassRoomProvider.notifier).setDocPresentation(
+                                  isOpen: true,
+                                  title: _currentDocTitle,
+                                  page: _pdfCurrentPage + 1,
+                                );
+                              }
+                            : null)
+                        : (_currentSlideNumber < _totalSlides
+                            ? () {
+                                setState(() => _currentSlideNumber++);
+                                ref.read(liveClassRoomProvider.notifier).setDocPresentation(
+                                  isOpen: true,
+                                  title: _currentDocTitle,
+                                  page: _currentSlideNumber,
+                                );
+                              }
+                            : null),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.folder_open, color: AppColors.skyBlue, size: 20),
+                    tooltip: 'Switch Document',
+                    onPressed: _showDocPickerSheet,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.liveRed, size: 20),
+                    tooltip: 'Close Presentation',
+                    onPressed: _closePresentation,
+                  ),
+                ],
               ],
             ),
           ),
 
-          // Slide Display Canvas
+          // Main Slide / PDF Display Canvas
           Expanded(
             child: Container(
               margin: const EdgeInsets.all(12),
@@ -1669,47 +1761,106 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: _buildSlideContent(_currentSlideNumber),
+                child: _pickedPdfPath != null
+                    ? Stack(
+                        children: [
+                          PDFView(
+                            filePath: _pickedPdfPath!,
+                            enableSwipe: isTeacher,
+                            swipeHorizontal: true,
+                            autoSpacing: true,
+                            pageFling: true,
+                            pageSnap: true,
+                            defaultPage: _pdfCurrentPage,
+                            fitPolicy: FitPolicy.BOTH,
+                            preventLinkNavigation: false,
+                            onRender: (pages) {
+                              if (mounted) {
+                                setState(() {
+                                  _pdfTotalPages = pages ?? 0;
+                                  _pdfIsReady = true;
+                                });
+                              }
+                            },
+                            onViewCreated: (PDFViewController controller) {
+                              _pdfViewController = controller;
+                            },
+                            onPageChanged: (page, total) {
+                              if (mounted) {
+                                setState(() {
+                                  _pdfCurrentPage = page ?? 0;
+                                  _pdfTotalPages = total ?? 0;
+                                });
+                              }
+                              if (isTeacher) {
+                                ref.read(liveClassRoomProvider.notifier).setDocPresentation(
+                                  isOpen: true,
+                                  title: _currentDocTitle,
+                                  page: (page ?? 0) + 1,
+                                );
+                              }
+                            },
+                          ),
+                          if (!_pdfIsReady)
+                            const Center(child: CircularProgressIndicator(color: AppColors.skyBlue)),
+                        ],
+                      )
+                    : _buildSlideContent(isTeacher ? _currentSlideNumber : roomState.docPage),
               ),
             ),
           ),
 
-          // Quick Slide Navigation Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            color: const Color(0xFF1E293B),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: List.generate(_totalSlides, (idx) {
-                  final slideNum = idx + 1;
-                  final isCurrent = slideNum == _currentSlideNumber;
-                  return InkWell(
-                    onTap: () => setState(() => _currentSlideNumber = slideNum),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: isCurrent ? AppColors.skyBlue : const Color(0xFF0F172A),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: isCurrent ? AppColors.skyBlue : const Color(0xFF334155),
+          // Bottom Quick Navigation Bar (Teacher controls)
+          if (isTeacher)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              color: const Color(0xFF1E293B),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: List.generate(totalPageNum, (idx) {
+                    final pageNum = idx + 1;
+                    final isCurrent = _pickedPdfPath != null
+                        ? idx == _pdfCurrentPage
+                        : pageNum == _currentSlideNumber;
+                    return InkWell(
+                      onTap: () {
+                        if (_pickedPdfPath != null) {
+                          _pdfViewController?.setPage(idx);
+                          setState(() => _pdfCurrentPage = idx);
+                        } else {
+                          setState(() => _currentSlideNumber = pageNum);
+                        }
+                        ref.read(liveClassRoomProvider.notifier).setDocPresentation(
+                          isOpen: true,
+                          title: _currentDocTitle,
+                          page: pageNum,
+                        );
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: isCurrent ? AppColors.skyBlue : const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isCurrent ? AppColors.skyBlue : const Color(0xFF334155),
+                          ),
+                        ),
+                        child: Text(
+                          _pickedPdfPath != null ? 'Page $pageNum' : 'Slide $pageNum',
+                          style: TextStyle(
+                            color: isCurrent ? Colors.white : AppColors.slate400,
+                            fontSize: 11,
+                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                          ),
                         ),
                       ),
-                      child: Text(
-                        'Slide $slideNum',
-                        style: TextStyle(
-                          color: isCurrent ? Colors.white : AppColors.slate400,
-                          fontSize: 11,
-                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                    ),
-                  );
-                }),
+                    );
+                  }),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

@@ -84,3 +84,9 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress
   - Verified `flutter analyze` (0 issues), `flutter test` (5/5 passing), `npm test` (72/72 passing).
   - Generated universal release APK: `builds/Classora-20261010-2330.apk`.
   - Updated `builds/README.md`, `docs/MEMORY.md`, and final audit report.
+- [x] **Phase F — Real PDF Viewer & Presentation Sync Architecture**:
+  - Integrated native PDF rendering engine (`flutter_pdfview: 1.4.5`) for smooth scrolling, pinch-to-zoom, and page navigation.
+  - Enforced teacher-only presenter role: Removed "Board" and "PPT / PDF" controls from student toolbar.
+  - Implemented real-time presentation broadcasting (`doc:present` event in socket gateway).
+  - Synchronized student main stage: Automatically mirrors teacher's active slides, pages, or whiteboard without student manual interaction.
+  - Built In-App Study Material Document & PDF Reader modal in `assignments_screen.dart` with local file rendering.

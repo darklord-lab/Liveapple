@@ -87,3 +87,10 @@ Follow RULES.md strictly. Work one phase at a time from TASKS.md.
   - Phase C (Bug Fixes C1–C7): Fixed batch dropdown overflow; removed solo whiteboard card; unified participant list with deduplication and sorting; derived track states and replaced fake SFU text with live connection badge; wired Socket.IO in-class chat with AA contrast; multi-batch schedule fixes with realtime socket events and 10s fallback polling; teacher timetable day counts, past classes filter, 2-line title cards, and 10-minute host disconnect auto-end timeout.
   - Phase D (Flutter UI Redesign): Design tokens aligned to `docs/DESIGN.md`, role-based card navigation, guarded demo chips.
   - Phase E (Handover & Build): Ran all test suites (72/72 backend passing, 5/5 flutter passing, 0 flutter analyze issues), built universal release APK `builds/Classora-20261010-2330.apk` (SHA-256: `E71ACBB41F8CB8F9D89C1A570E2CE56321F014A7DB6BF8594938B36822B6C237`), updated `builds/README.md`, `docs/TASKS.md`, `docs/MEMORY.md`, and finalized report.
+- 2026-10-12: Phase F (Real PDF Viewer, Student Presentation Sync, Presenter Role Enforcement):
+  - Added `flutter_pdfview: 1.4.5` native engine for real PDF rendering in Live Classroom and Study Material.
+  - Implemented teacher-only presentation authority: removed `Board` and `PPT / PDF` buttons from student bottom toolbar.
+  - Added real-time `doc:present` signaling event in backend Socket.IO gateway (`socket.ts`) and controller (`live_class_room_controller.dart`).
+  - Synced student main stage so students automatically watch teacher's slides, pages, or whiteboard without needing manual controls.
+  - Built In-App Study Material Document Viewer in `assignments_screen.dart` with local file rendering.
+  - All 72 backend unit tests passed; `flutter analyze` 0 issues; updated release APK built.

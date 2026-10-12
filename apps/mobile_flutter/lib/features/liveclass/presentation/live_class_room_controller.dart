@@ -95,6 +95,9 @@ class LiveClassRoomState {
   final bool isScreenSharing;
   final bool isWhiteboardOpen;
   final bool isBoardAllowed;
+  final bool isDocPresenting;
+  final String docTitle;
+  final int docPage;
   final String? activeSpeakerName;
   final List<ClassParticipant> participants;
   final List<ChatMessageItem> chatMessages;
@@ -119,6 +122,9 @@ class LiveClassRoomState {
     this.isScreenSharing = false,
     this.isWhiteboardOpen = false,
     this.isBoardAllowed = false,
+    this.isDocPresenting = false,
+    this.docTitle = '',
+    this.docPage = 1,
     this.activeSpeakerName,
     this.participants = const [],
     this.chatMessages = const [],
@@ -144,6 +150,9 @@ class LiveClassRoomState {
     bool? isScreenSharing,
     bool? isWhiteboardOpen,
     bool? isBoardAllowed,
+    bool? isDocPresenting,
+    String? docTitle,
+    int? docPage,
     String? activeSpeakerName,
     List<ClassParticipant>? participants,
     List<ChatMessageItem>? chatMessages,
@@ -170,6 +179,9 @@ class LiveClassRoomState {
       isScreenSharing: isScreenSharing ?? this.isScreenSharing,
       isWhiteboardOpen: isWhiteboardOpen ?? this.isWhiteboardOpen,
       isBoardAllowed: isBoardAllowed ?? this.isBoardAllowed,
+      isDocPresenting: isDocPresenting ?? this.isDocPresenting,
+      docTitle: docTitle ?? this.docTitle,
+      docPage: docPage ?? this.docPage,
       activeSpeakerName: activeSpeakerName ?? this.activeSpeakerName,
       participants: participants ?? this.participants,
       chatMessages: chatMessages ?? this.chatMessages,
@@ -467,6 +479,20 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
         }
       });
 
+      // 8b. Document Presentation Sync event (Teacher presents to all students)
+      _socket?.on('doc:present', (data) {
+        if (data is Map) {
+          final isOpen = data['isOpen'] as bool? ?? false;
+          final title = data['title'] as String? ?? '';
+          final page = data['page'] as int? ?? 1;
+          state = state.copyWith(
+            isDocPresenting: isOpen,
+            docTitle: title,
+            docPage: page,
+          );
+        }
+      });
+
       // 9. Class Ended event
       _socket?.on('class:ended', (_) {
         state = state.copyWith(isClassEnded: true, isConnected: false);
@@ -706,6 +732,18 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
     state = state.copyWith(isWhiteboardOpen: next);
     if (_currentClassId != null && state.isHost) {
       _socket?.emit('board:toggle', {'classId': _currentClassId, 'isOpen': next});
+    }
+  }
+
+  void setDocPresentation({required bool isOpen, String title = '', int page = 1}) {
+    state = state.copyWith(isDocPresenting: isOpen, docTitle: title, docPage: page);
+    if (_currentClassId != null && state.isHost) {
+      _socket?.emit('doc:present', {
+        'classId': _currentClassId,
+        'isOpen': isOpen,
+        'title': title,
+        'page': page,
+      });
     }
   }
 
