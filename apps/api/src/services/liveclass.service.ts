@@ -255,6 +255,25 @@ export class LiveClassService {
       console.error('[NOTIFICATION-ERROR] Failed to send live class notifications:', err);
     }
 
+    // Emit real-time socket 'class:live' to all enrolled students for instant UI sync
+    try {
+      const livepayload = {
+        classId: updated.id,
+        batchId: updated.batchId,
+        title: updated.title,
+        livekitRoom: updated.livekitRoom,
+        teacherName: updated.teacher.name,
+        batchName: updated.batch.name,
+      };
+      const enrollments = liveClass.batch.enrollments;
+      for (const e of enrollments) {
+        emitToUser(e.studentId, 'class:live', livepayload);
+      }
+      emitToInstitute(instituteId, 'class:live', livepayload);
+    } catch (err) {
+      console.error('[REALTIME-SOCKET-ERROR] Failed to emit class:live:', err);
+    }
+
     return updated;
   }
 

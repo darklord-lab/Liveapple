@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/storage/secure_storage.dart';
+import '../../../core/network/endpoints.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../auth/domain/user_model.dart';
 import '../../batch/presentation/batch_controller.dart';
@@ -43,6 +46,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
   bool _homeworkAlerts = false;
 
   Timer? _fallbackPollingTimer;
+  io.Socket? _globalSocket;
 
   @override
   void initState() {
@@ -58,12 +62,59 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
       ref.read(liveClassProvider.notifier).loadClasses();
       ref.read(batchListProvider.notifier).loadBatches();
       ref.read(timetableProvider.notifier).loadSlots();
+      _initGlobalSocket();
     });
+  }
+
+  /// Connects a background socket to receive instant 'class:live' push events.
+  /// When a teacher starts a class, this fires immediately and refreshes the class list,
+  /// so the student sees the LIVE NOW banner without waiting for the 10s polling cycle.
+  Future<void> _initGlobalSocket() async {
+    try {
+      final storage = SecureStorageService();
+      final baseUrl = await storage.getBaseUrl() ?? Endpoints.defaultBaseUrl;
+      final accessToken = await storage.getAccessToken();
+      if (accessToken == null) return;
+
+      final uri = Uri.parse(baseUrl);
+      final socketHost = '${uri.scheme}://${uri.host}:${uri.port}';
+
+      _globalSocket = io.io(
+        socketHost,
+        io.OptionBuilder()
+            .setTransports(['websocket'])
+            .setAuth({'token': accessToken})
+            .enableAutoConnect()
+            .build(),
+      );
+
+      _globalSocket?.on('class:live', (data) {
+        debugPrint('[HOME-SOCKET] class:live — teacher started a class! Reloading...');
+        if (mounted) {
+          ref.read(liveClassProvider.notifier).loadClasses();
+        }
+      });
+
+      _globalSocket?.on('class:scheduled', (data) {
+        if (mounted) {
+          ref.read(liveClassProvider.notifier).loadClasses();
+        }
+      });
+
+      _globalSocket?.on('connect_error', (err) {
+        debugPrint('[HOME-SOCKET] connect error: $err');
+      });
+    } catch (e) {
+      debugPrint('[HOME-SOCKET] setup error: $e');
+    }
   }
 
   @override
   void dispose() {
     _fallbackPollingTimer?.cancel();
+    _globalSocket?.disconnect();
+    _globalSocket?.dispose();
+    _globalSocket = null;
     _searchController.dispose();
     super.dispose();
   }

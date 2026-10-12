@@ -472,6 +472,13 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
         state = state.copyWith(isClassEnded: true, isConnected: false);
       });
 
+      // 10. Class became LIVE event (teacher started the class while student is in waiting lobby)
+      _socket?.on('class:live', (data) {
+        debugPrint('[SOCKET] class:live received — teacher started the class!');
+        // Re-sync remote participants on LiveKit (teacher may have just started streaming)
+        _syncExistingRemoteParticipants();
+      });
+
       _socket?.onDisconnect((_) {
         state = state.copyWith(connectionState: 'disconnected');
       });
@@ -497,11 +504,34 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
           final updated = Map<String, lk.VideoTrack>.from(state.remoteVideoTracks);
           updated.remove(event.participant.identity);
           state = state.copyWith(remoteVideoTracks: updated);
+        } else if (event is lk.ParticipantConnectedEvent) {
+          // A new remote participant joined — add them to participants list
+          final p = event.participant;
+          final isHostPeer = (p.metadata?.contains('isHost":true') ?? false) ||
+              p.identity.startsWith('teacher') || p.identity.startsWith('admin');
+          final newPeer = ClassParticipant(
+            identity: p.identity,
+            name: p.name.isNotEmpty ? p.name : p.identity,
+            role: isHostPeer ? 'TEACHER' : 'STUDENT',
+            isHost: isHostPeer,
+            isLocal: false,
+            isMicMuted: true,
+            isCameraOff: true,
+          );
+          state = state.copyWith(
+            participants: ClassParticipant.deduplicateAndSort([...state.participants, newPeer]),
+          );
+        } else if (event is lk.ParticipantDisconnectedEvent) {
+          final filtered = state.participants.where((p) => p.identity != event.participant.identity).toList();
+          state = state.copyWith(participants: ClassParticipant.deduplicateAndSort(filtered));
         }
       });
 
       await _liveKitRoom?.connect(serverUrl, token);
       debugPrint('[LIVEKIT] Connected successfully. Connection state: ${_liveKitRoom?.connectionState}');
+
+      // Process already-connected remote participants (teacher may already be streaming)
+      _syncExistingRemoteParticipants();
 
       // If local video/audio tracks are ready and active, publish to SFU
       if (state.localVideoTrack != null && !state.isCameraOff) {
@@ -517,6 +547,53 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
     } catch (e) {
       // Graceful fallback for simulator / non-webrtc environments
       debugPrint('[LIVEKIT] LiveKit initialization note: $e');
+    }
+  }
+
+  /// Sync any already-connected remote participants and their published tracks.
+  /// This is critical when a student joins after the teacher has already started streaming.
+  void _syncExistingRemoteParticipants() {
+    try {
+      final remoteParticipants = _liveKitRoom?.remoteParticipants;
+      if (remoteParticipants == null || remoteParticipants.isEmpty) return;
+
+      final updatedVideoTracks = Map<String, lk.VideoTrack>.from(state.remoteVideoTracks);
+      final newParticipants = List<ClassParticipant>.from(state.participants);
+
+      for (final entry in remoteParticipants.entries) {
+        final p = entry.value;
+        final isHostPeer = (p.metadata?.contains('isHost":true') ?? false) ||
+            p.identity.startsWith('teacher') || p.identity.startsWith('admin');
+
+        // Add to participants list if not already there
+        if (!newParticipants.any((cp) => cp.identity == p.identity)) {
+          newParticipants.add(ClassParticipant(
+            identity: p.identity,
+            name: p.name.isNotEmpty ? p.name : p.identity,
+            role: isHostPeer ? 'TEACHER' : 'STUDENT',
+            isHost: isHostPeer,
+            isLocal: false,
+            isMicMuted: true,
+            isCameraOff: false,
+          ));
+        }
+
+        // Pick up already-published video tracks
+        for (final trackPub in p.videoTrackPublications) {
+          final vt = trackPub.track;
+          if (vt != null) {
+            updatedVideoTracks[p.identity] = vt;
+            debugPrint('[LIVEKIT] Synced existing video track from ${p.identity}');
+          }
+        }
+      }
+
+      state = state.copyWith(
+        remoteVideoTracks: updatedVideoTracks,
+        participants: ClassParticipant.deduplicateAndSort(newParticipants),
+      );
+    } catch (e) {
+      debugPrint('[LIVEKIT] Error syncing existing participants: $e');
     }
   }
 
