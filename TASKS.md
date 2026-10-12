@@ -31,7 +31,7 @@ Legend: `[x]` done and proven · `[v]` reported done, needs verification on real
 - [x] 3.1 Theme, core widgets, Student Home + Drawer + Settings + permission dialogs
 - [x] 3.2 Student: Schedule, Batches/Join, Learn (Study Material · Recordings · Assignments · Tests)
 - [x] 3.3 Teacher: Home tiles, Timetable (overflow fixed), Batch detail, Live Classes
-- [ ] 3.4 Admin: Overview, Teachers, Batches, Fees
+- [x] 3.4 Admin: Overview, Teachers, Batches, Fees
 - [ ] 3.5 Live classroom restyle (dark Meet-like), PiP, reconnect banner
 - [ ] 3.6 Login in new style, consistency pass, overflow tests 320/360 dp
 
