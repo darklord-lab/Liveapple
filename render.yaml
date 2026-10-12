@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: classora-api
+    runtime: node
+    rootDir: apps/api
+    plan: free
+    buildCommand: npm install && npx prisma generate && npx prisma db push && npm run db:reset-demo
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        value: file:./dev.db
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_DAYS
+        value: "30"
+      - key: INVITE_TOKEN_EXPIRES_HOURS
+        value: "48"
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: LIVEKIT_URL
+        value: http://localhost:7880
+      - key: LIVEKIT_API_KEY
+        value: devkey
+      - key: LIVEKIT_API_SECRET
+        value: secret
