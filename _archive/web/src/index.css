@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+  }
+  
+  html, body {
+    background-color: #f8fafc;
+    color: #0f172a;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    overscroll-behavior-y: none;
+  }
+
+  /* Safe Area Padding Utilities */
+  .pt-safe {
+    padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+  }
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  }
+  .h-safe-screen {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* Crisp Light Theme Scrollbar */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+}
+
+/* Board canvas paper backgrounds */
+.board-pattern-grid {
+  background-size: 24px 24px;
+  background-image: 
+    linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+    linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+}
+
+.board-pattern-dots {
+  background-size: 20px 20px;
+  background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
+}
+
+.board-pattern-ruled {
+  background-size: 100% 28px;
+  background-image: linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+}

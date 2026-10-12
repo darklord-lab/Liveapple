@@ -1,0 +1,116 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../features/auth/domain/auth_state.dart';
+import '../../features/auth/presentation/auth_controller.dart';
+import '../../features/auth/presentation/splash_screen.dart';
+import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/accept_invite_screen.dart';
+import '../../features/admin/presentation/admin_home_screen.dart';
+import '../../features/teacher/presentation/teacher_home_screen.dart';
+import '../../features/student/presentation/student_home_screen.dart';
+import '../../features/liveclass/presentation/live_classroom_screen.dart';
+import '../../features/learning/presentation/screens/recordings_screen.dart';
+import '../../features/learning/presentation/screens/assignments_screen.dart';
+import '../../features/learning/presentation/screens/cbt_tests_screen.dart';
+import '../../features/learning/presentation/screens/fees_screen.dart';
+import '../../features/learning/presentation/screens/attendance_screen.dart';
+
+final routerProvider = Provider<GoRouter>((ref) {
+  final authState = ref.watch(authStateProvider);
+
+  return GoRouter(
+    initialLocation: '/splash',
+    routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/accept-invite',
+        builder: (context, state) => const AcceptInviteScreen(),
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (context, state) => AdminHomeScreen(user: authState.user!),
+      ),
+      GoRoute(
+        path: '/teacher',
+        builder: (context, state) => TeacherHomeScreen(user: authState.user!),
+      ),
+      GoRoute(
+        path: '/student',
+        builder: (context, state) => StudentHomeScreen(user: authState.user!),
+      ),
+      GoRoute(
+        path: '/live/:id',
+        builder: (context, state) => LiveClassroomScreen(classId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/recordings',
+        builder: (context, state) => const RecordingsScreen(),
+      ),
+      GoRoute(
+        path: '/assignments',
+        builder: (context, state) => AssignmentsScreen(isTeacher: authState.user?.role == 'TEACHER'),
+      ),
+      GoRoute(
+        path: '/tests',
+        builder: (context, state) => const CbtTestsScreen(),
+      ),
+      GoRoute(
+        path: '/fees',
+        builder: (context, state) => const FeesScreen(),
+      ),
+      GoRoute(
+        path: '/attendance',
+        builder: (context, state) => const AttendanceScreen(),
+      ),
+    ],
+    redirect: (BuildContext context, GoRouterState state) {
+      final status = authState.status;
+      final location = state.matchedLocation;
+
+      // 1. Initial / Loading -> Stay on splash
+      if (status == AuthStatus.initial || status == AuthStatus.loading) {
+        return location == '/splash' ? null : '/splash';
+      }
+
+      // 2. Unauthenticated -> Go to login or accept-invite
+      if (status == AuthStatus.unauthenticated || status == AuthStatus.error) {
+        if (location == '/login' || location == '/accept-invite') {
+          return null;
+        }
+        return '/login';
+      }
+
+      // 3. Authenticated -> Route based on role
+      if (status == AuthStatus.authenticated && authState.user != null) {
+        final role = authState.user!.role;
+        final targetHome = role == 'ADMIN'
+            ? '/admin'
+            : role == 'TEACHER'
+                ? '/teacher'
+                : '/student';
+
+        // If on splash, login, or accept-invite, redirect to role home
+        if (location == '/splash' || location == '/login' || location == '/accept-invite') {
+          return targetHome;
+        }
+
+        // Role protection: prevent students from going to /admin, etc.
+        if (location == '/admin' && role != 'ADMIN') return targetHome;
+        if (location == '/teacher' && role != 'TEACHER') return targetHome;
+        if (location == '/student' && role != 'STUDENT') return targetHome;
+
+        return null;
+      }
+
+      return null;
+    },
+  );
+});

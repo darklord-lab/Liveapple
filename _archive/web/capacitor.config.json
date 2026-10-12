@@ -1,0 +1,13 @@
+{
+  "appId": "com.classora.app",
+  "appName": "Classora",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0F172A"
+  },
+  "server": {
+    "cleartext": true
+  }
+}

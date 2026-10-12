@@ -1,0 +1,5 @@
+package com.classora.app;
+
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {}
