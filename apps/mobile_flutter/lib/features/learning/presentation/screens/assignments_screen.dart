@@ -7,6 +7,7 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../batch/presentation/batch_controller.dart';
+import '../../../../core/widgets/empty_state.dart';
 import '../controllers/learning_controller.dart';
 import '../../domain/models/learning_models.dart';
 
@@ -23,12 +24,12 @@ class AssignmentsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Study Material & Notes', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Assignments & Homework', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           if (canCreate)
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
-              tooltip: 'Upload Study Material or Notes',
+              tooltip: 'Create Assignment',
               onPressed: () => _showCreateAssignmentDialog(context, ref),
             ),
           IconButton(
@@ -41,7 +42,7 @@ class AssignmentsScreen extends ConsumerWidget {
           ? FloatingActionButton.extended(
               backgroundColor: AppColors.skyBlue,
               icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('Upload Notes / Material', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              label: const Text('Create Assignment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               onPressed: () => _showCreateAssignmentDialog(context, ref),
             )
           : null,
@@ -53,37 +54,16 @@ class AssignmentsScreen extends ConsumerWidget {
             children: [
               const Icon(Icons.error_outline, color: AppColors.liveRed, size: 40),
               const SizedBox(height: 12),
-              Text('Error loading materials: $err', style: const TextStyle(color: Colors.white70)),
+              Text('Error loading assignments: $err', style: const TextStyle(color: AppColors.slate500)),
             ],
           ),
         ),
         data: (assignments) {
           if (assignments.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceLight.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(Icons.menu_book_rounded, color: AppColors.slate400, size: 36),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No study material or notes yet',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Faculty notes, handouts, and assignments will appear here.',
-                    style: TextStyle(color: AppColors.slate400, fontSize: 13),
-                  ),
-                ],
-              ),
+            return const EmptyState(
+              icon: Icons.menu_book_rounded,
+              title: 'No assignments yet',
+              subtitle: 'Homework, DPPs, and practice sheets will appear here.',
             );
           }
 
@@ -110,16 +90,23 @@ class AssignmentsScreen extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: item.isGraded
-                ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                ? AppColors.success.withValues(alpha: 0.5)
                 : item.isSubmitted
-                    ? const Color(0xFF38BDF8).withValues(alpha: 0.5)
-                    : const Color(0xFF334155),
+                    ? AppColors.skyBlue.withValues(alpha: 0.5)
+                    : AppColors.borderLight,
             width: 1.2,
           ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0A000000),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,17 +117,17 @@ class AssignmentsScreen extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                      color: AppColors.skyBlueLight,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       item.subject ?? item.batchName!,
-                      style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
+                      style: const TextStyle(color: AppColors.skyBlue, fontSize: 11, fontWeight: FontWeight.bold),
                     ),
                   ),
                   const SizedBox(width: 8),
                 ],
-                Text('Max Marks: ${item.maxMarks}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                Text('Max Marks: ${item.maxMarks}', style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
                 const Spacer(),
                 _buildStatusBadge(item),
               ],
@@ -148,14 +135,14 @@ class AssignmentsScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             Text(
               item.title,
-              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(color: AppColors.textLight, fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
               item.description,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+              style: const TextStyle(color: AppColors.slate500, fontSize: 13),
             ),
             if (item.attachmentUrl != null && item.attachmentUrl!.isNotEmpty) ...[
               const SizedBox(height: 8),

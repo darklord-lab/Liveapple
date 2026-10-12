@@ -29,7 +29,7 @@ Legend: `[x]` done and proven · `[v]` reported done, needs verification on real
 
 ## Stage 3 — UI redesign (design system first)  [STOP after 3.1 for approval]
 - [x] 3.1 Theme, core widgets, Student Home + Drawer + Settings + permission dialogs
-- [ ] 3.2 Student: Schedule, Batches/Join, Learn (Study Material · Recordings · Assignments · Tests)
+- [x] 3.2 Student: Schedule, Batches/Join, Learn (Study Material · Recordings · Assignments · Tests)
 - [ ] 3.3 Teacher: Home tiles, Timetable (overflow fixed), Batch detail, Live Classes
 - [ ] 3.4 Admin: Overview, Teachers, Batches, Fees
 - [ ] 3.5 Live classroom restyle (dark Meet-like), PiP, reconnect banner

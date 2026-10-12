@@ -8,6 +8,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../batch/presentation/batch_controller.dart';
+import '../../../../core/widgets/empty_state.dart';
 import '../controllers/learning_controller.dart';
 import '../../domain/models/learning_models.dart';
 
@@ -63,31 +64,10 @@ class RecordingsScreen extends ConsumerWidget {
         ),
         data: (recordings) {
           if (recordings.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceLight.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(Icons.video_library_outlined, color: AppColors.slate400, size: 36),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No recordings yet',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Completed live classes with recordings will appear here.',
-                    style: TextStyle(color: AppColors.slate400, fontSize: 13),
-                  ),
-                ],
-              ),
+            return const EmptyState(
+              icon: Icons.video_library_outlined,
+              title: 'No recordings yet',
+              subtitle: 'Completed live classes with recordings will appear here.',
             );
           }
 
@@ -114,9 +94,16 @@ class RecordingsScreen extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF334155), width: 1),
+          border: Border.all(color: AppColors.borderLight, width: 1),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0A000000),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -126,12 +113,12 @@ class RecordingsScreen extends ConsumerWidget {
               width: 70,
               height: 70,
               decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
+                color: AppColors.skyBlueLight,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+                border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.3)),
               ),
               child: const Center(
-                child: Icon(Icons.play_circle_fill, color: Color(0xFF38BDF8), size: 36),
+                child: Icon(Icons.play_circle_fill, color: AppColors.skyBlue, size: 36),
               ),
             ),
             const SizedBox(width: 14),
@@ -147,18 +134,18 @@ class RecordingsScreen extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                            color: AppColors.skyBlueLight,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             item.subject ?? item.batchName!,
-                            style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
+                            style: const TextStyle(color: AppColors.skyBlue, fontSize: 11, fontWeight: FontWeight.bold),
                           ),
                         ),
                         const SizedBox(width: 6),
                         Text(
                           '• ${item.batchName!}',
-                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                          style: const TextStyle(color: AppColors.slate500, fontSize: 11),
                         ),
                       ],
                     ),
@@ -166,22 +153,22 @@ class RecordingsScreen extends ConsumerWidget {
                   ],
                   Text(
                     item.title,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: AppColors.textLight, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(Icons.timer_outlined, size: 13, color: Color(0xFF94A3B8)),
+                      const Icon(Icons.timer_outlined, size: 13, color: AppColors.slate500),
                       const SizedBox(width: 4),
-                      Text(item.durationFormatted, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                      Text(item.durationFormatted, style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
                       const SizedBox(width: 12),
-                      const Icon(Icons.calendar_today_outlined, size: 13, color: Color(0xFF94A3B8)),
+                      const Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.slate500),
                       const SizedBox(width: 4),
-                      Text(dateStr, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                      Text(dateStr, style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
                       const Spacer(),
-                      const Icon(Icons.lock_outline, size: 13, color: Colors.greenAccent),
+                      const Icon(Icons.lock_outline, size: 13, color: AppColors.success),
                       const SizedBox(width: 3),
-                      const Text('Protected', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                      const Text('Protected', style: TextStyle(color: AppColors.success, fontSize: 10, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ],

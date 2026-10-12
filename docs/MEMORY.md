@@ -40,7 +40,8 @@ Follow RULES.md. Label results WORKING/PARTIAL/STUB/BROKEN/MISSING/NOT VERIFIED 
 - 2026-10-09: docs v1, Phases 0-6 built by agent; audit found overclaims
 - 2026-10-10: satyam2.md fixes (C1-C7), cleanup, APK on phones; Cloudflare tunnel + LiveKit Cloud plan
 - 2026-10-11: docs v2 (this set): new feature list, Test Series removed, in-class chat only. Next: phone test, then Stage 1 -> 3.1
-- 2026-10-12: Stage 2 & 3.1 completed: standalone whiteboard removed, tokens aligned to DESIGN.md (#0A9BE8, Inter), core widgets built (ColorTile, StatusPill, PermissionRationaleDialog, ConfirmDialog, EmptyState), fake counts removed, flutter analyze 0 issues, npm test 72/72 pass. Paused after Stage 3.1 for user approval.
+- 2026-10-12: Stage 2 & 3.1 completed: standalone whiteboard removed, tokens aligned to DESIGN.md (#0A9BE8, Inter), core widgets built (ColorTile, StatusPill, PermissionRationaleDialog, ConfirmDialog, EmptyState), fake counts removed, flutter analyze 0 issues, npm test 72/72 pass.
+- 2026-10-12: Stage 3.2 completed: Dynamic schedule day/date computation, real slot status logic (LIVE/ENDED/UPCOMING), StatusPill badges, real batch filtering in Study Material, interactive resource sheet (no dead UI), light theme redesign for Recordings, Assignments & CBT Tests. flutter analyze 0 issues, npm test 72/72 pass.
 
 ## Reported by agent on 2026-10-11 (UNVERIFIED, needs audit)
 - Backend deployed on Render (liveapple.onrender.com); README says SQLite local / PostgreSQL on Render. Admin web console served from apps/api/admin-dist at /admin/.

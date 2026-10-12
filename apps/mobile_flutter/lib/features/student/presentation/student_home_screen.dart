@@ -19,10 +19,12 @@ import '../../notifications/presentation/widgets/notification_bell_button.dart';
 import '../../learning/presentation/screens/recordings_screen.dart';
 import '../../learning/presentation/screens/assignments_screen.dart';
 import '../../learning/presentation/screens/cbt_tests_screen.dart';
+import 'package:intl/intl.dart';
 import '../../../core/widgets/color_tile.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../../../core/widgets/permission_rationale_dialog.dart';
 import '../../../core/widgets/confirm_dialog.dart';
+import '../../../core/widgets/empty_state.dart';
 
 class StudentHomeScreen extends ConsumerStatefulWidget {
   final UserModel user;
@@ -1137,6 +1139,13 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
     // Filter classes or slots for selected day
     final slots = timetableState.slots.where((s) => s.dayOfWeek == selectedDayIndex).toList();
 
+    final now = DateTime.now();
+    final todaySlotDay = now.weekday % 7; // Sunday=0, Monday=1, ...
+    final dayOffset = selectedDayIndex - todaySlotDay;
+    final targetDate = now.add(Duration(days: dayOffset));
+    final formattedDate = DateFormat('d MMM').format(targetDate);
+    final currentMinutes = now.hour * 60 + now.minute;
+
     return Column(
       children: [
         // Horizontal Day Selector Chips
@@ -1195,7 +1204,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Text(
-            '${_getFullDayName(selectedDayIndex)}, 12 Oct',
+            '${_getFullDayName(selectedDayIndex)}, $formattedDate',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textLight),
           ),
         ),
@@ -1208,17 +1217,10 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
               await ref.read(liveClassProvider.notifier).loadClasses();
             },
             child: slots.isEmpty && liveClassState.classes.isEmpty
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.calendar_today_outlined, size: 48, color: AppColors.slate400),
-                        SizedBox(height: 12),
-                        Text('No classes scheduled for this day', style: TextStyle(fontWeight: FontWeight.bold)),
-                        SizedBox(height: 4),
-                        Text('Pull down to refresh', style: TextStyle(color: AppColors.slate500, fontSize: 12)),
-                      ],
-                    ),
+                ? const EmptyState(
+                    icon: Icons.calendar_today_outlined,
+                    title: 'No classes scheduled for this day',
+                    subtitle: 'Check other days or pull down to refresh',
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -1232,15 +1234,23 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                               orElse: () => null,
                             );
 
+                        final String slotStatus;
+                        if (matchingClass?.isLive == true) {
+                          slotStatus = 'LIVE';
+                        } else if (selectedDayIndex < todaySlotDay ||
+                            (selectedDayIndex == todaySlotDay && currentMinutes > slot.endMin)) {
+                          slotStatus = 'ENDED';
+                        } else {
+                          slotStatus = 'UPCOMING';
+                        }
+
                         return _buildScheduleItemCard(
                           startTime: TimetableSlotModel.formatMinutes(slot.startMin),
                           endTime: TimetableSlotModel.formatMinutes(slot.endMin),
                           title: slot.subject != null ? '${slot.subject} - Session' : 'Scheduled Class',
                           subtitle: '${slot.batchName ?? 'Batch'} • ${slot.subject ?? 'Subject'}',
                           teacher: slot.teacherName ?? 'Faculty',
-                          status: matchingClass?.isLive == true
-                              ? 'LIVE'
-                              : (idx == 0 ? 'ENDED' : 'UPCOMING'),
+                          status: slotStatus,
                           liveClassId: matchingClass?.id,
                         );
                       } else {
@@ -1279,6 +1289,13 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.borderLight),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -1319,62 +1336,28 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: AppColors.liveRed, borderRadius: BorderRadius.circular(6)),
-                  child: const Text('LIVE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(height: 4),
-                SizedBox(
-                  height: 28,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (liveClassId != null) context.push('/live/$liveClassId');
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.skyBlue,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                const StatusPill(status: ClassStatus.live),
+                if (liveClassId != null) ...[
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: 28,
+                    child: ElevatedButton(
+                      onPressed: () => context.push('/live/$liveClassId'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.skyBlue,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: const Text('Join', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
                     ),
-                    child: const Text('Join', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                   ),
-                ),
+                ],
               ],
             ),
           ] else if (status == 'ENDED') ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: AppColors.slate200, borderRadius: BorderRadius.circular(6)),
-              child: const Text('ENDED', style: TextStyle(color: AppColors.slate500, fontSize: 10, fontWeight: FontWeight.bold)),
-            ),
+            const StatusPill(status: ClassStatus.ended),
           ] else ...[
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: AppColors.skyBlueLight, borderRadius: BorderRadius.circular(6)),
-                  child: const Text('UPCOMING', style: TextStyle(color: AppColors.skyBlue, fontSize: 9, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(height: 4),
-                SizedBox(
-                  height: 28,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Reminder set: You will be notified 15 minutes prior.')),
-                      );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      side: const BorderSide(color: AppColors.skyBlue),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: const Text('Remind me', style: TextStyle(fontSize: 10, color: AppColors.skyBlue, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
+            const StatusPill(status: ClassStatus.upcoming),
           ],
         ],
       ),
@@ -1392,14 +1375,14 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
   Widget _buildLearnTab() {
     return Column(
       children: [
-        // 4 Sub-Tabs Bar (MATERIAL, RECORDINGS, ASSIGN., TESTS)
+        // 4 Sub-Tabs Bar (MATERIAL, RECORDINGS, ASSIGNMENTS, TESTS)
         Container(
           color: Colors.white,
           child: Row(
             children: [
               _buildSubTabHeader('MATERIAL', 0),
               _buildSubTabHeader('RECORDINGS', 1),
-              _buildSubTabHeader('ASSIGN.', 2),
+              _buildSubTabHeader('ASSIGNMENTS', 2),
               _buildSubTabHeader('TESTS', 3),
             ],
           ),
@@ -1439,13 +1422,16 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
               ),
             ),
           ),
-          child: Text(
-            title,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-              color: isSelected ? AppColors.skyBlue : AppColors.slate500,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                color: isSelected ? AppColors.skyBlue : AppColors.slate500,
+              ),
             ),
           ),
         ),
@@ -1454,7 +1440,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
   }
 
   Widget _buildStudyMaterialSubTab() {
-    // Sample material items matching reference screenshot
+    // Material items matching reference curriculum
     final materials = [
       {
         'title': 'Physics Notes',
@@ -1590,95 +1576,114 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
 
         // Material Items List
         Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-            itemCount: filtered.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, idx) {
-              final item = filtered[idx];
-              final isFolder = item['type'] == 'folder';
-              final isPdf = item['type'] == 'pdf';
-              final isFree = item['isFree'] == true;
+          child: filtered.isEmpty
+              ? EmptyState(
+                  icon: Icons.folder_open,
+                  title: 'No study material found',
+                  subtitle: 'Try clearing your search query or adjusting your filters',
+                  buttonText: 'Clear Filters',
+                  onAction: () {
+                    setState(() {
+                      _searchController.clear();
+                      _searchQuery = '';
+                      _selectedFilterType = null;
+                      _selectedFilterBatches.clear();
+                    });
+                  },
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  itemCount: filtered.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, idx) {
+                    final item = filtered[idx];
+                    final isFolder = item['type'] == 'folder';
+                    final isPdf = item['type'] == 'pdf';
+                    final isFree = item['isFree'] == true;
 
-              return Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.borderLight),
-                ),
-                child: Row(
-                  children: [
-                    // Icon
-                    if (isFolder)
-                      Container(
-                        padding: const EdgeInsets.all(8),
+                    return InkWell(
+                      onTap: () => _openStudyMaterialItem(item),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.amber.shade100,
-                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.borderLight),
                         ),
-                        child: const Icon(Icons.folder, color: Colors.amber, size: 22),
-                      )
-                    else if (isPdf)
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 22),
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.skyBlueLight,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.videocam, color: AppColors.skyBlue, size: 22),
-                      ),
-                    const SizedBox(width: 12),
-
-                    // Details
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  item['title'] as String,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                  overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          children: [
+                            // Icon
+                            if (isFolder)
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade100,
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
+                                child: const Icon(Icons.folder, color: Colors.amber, size: 22),
+                              )
+                            else if (isPdf)
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 22),
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.skyBlueLight,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.videocam, color: AppColors.skyBlue, size: 22),
                               ),
-                              if (isFree)
-                                Container(
-                                  margin: const EdgeInsets.only(left: 6),
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.success,
-                                    borderRadius: BorderRadius.circular(10),
+                            const SizedBox(width: 12),
+
+                            // Details
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          item['title'] as String,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (isFree)
+                                        Container(
+                                          margin: const EdgeInsets.only(left: 6),
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.success,
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: const Text('FREE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                        ),
+                                    ],
                                   ),
-                                  child: const Text('FREE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            item['subtitle'] as String,
-                            style: const TextStyle(fontSize: 12, color: AppColors.slate500),
-                          ),
-                        ],
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    item['subtitle'] as String,
+                                    style: const TextStyle(fontSize: 12, color: AppColors.slate500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right, color: AppColors.slate400),
+                          ],
+                        ),
                       ),
-                    ),
-                    const Icon(Icons.chevron_right, color: AppColors.slate400),
-                  ],
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
 
         // Hint Footer
@@ -1690,6 +1695,86 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
           ),
         ),
       ],
+    );
+  }
+
+  void _openStudyMaterialItem(Map<String, dynamic> item) {
+    final title = item['title'] as String;
+    final subtitle = item['subtitle'] as String;
+    final type = item['type'] as String;
+    final batch = item['batch'] as String;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.skyBlueLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    type == 'folder'
+                        ? Icons.folder
+                        : type == 'pdf'
+                            ? Icons.picture_as_pdf
+                            : Icons.videocam,
+                    color: AppColors.skyBlue,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 2),
+                      Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text('Enrolled Batch: $batch', style: const TextStyle(fontSize: 13, color: AppColors.slate700)),
+            const SizedBox(height: 4),
+            Text('Resource Type: ${type.toUpperCase()}', style: const TextStyle(fontSize: 13, color: AppColors.slate700)),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Opening "$title"...')),
+                  );
+                },
+                icon: const Icon(Icons.open_in_new, color: Colors.white),
+                label: Text(type == 'folder' ? 'Open Folder' : 'Open Document', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.skyBlue,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1707,7 +1792,10 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            final batches = ['Class 12 JEE - Physics', 'Class 12 JEE - Maths', 'Class 11 NEET - Chemistry'];
+            final enrolledBatches = ref.read(batchListProvider).batches;
+            final batches = enrolledBatches.isNotEmpty
+                ? enrolledBatches.map((b) => '${b.name} - ${b.subject}').toList()
+                : ['Class 12 JEE - Physics', 'Class 12 JEE - Maths', 'Class 11 NEET - Chemistry'];
             final types = ['PDF', 'Video', 'Link', 'Free only'];
             final sortOptions = ['Newest', 'Oldest', 'Name A-Z'];
 

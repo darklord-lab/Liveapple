@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/empty_state.dart';
 import '../controllers/learning_controller.dart';
 import '../../domain/models/learning_models.dart';
 
@@ -28,31 +29,10 @@ class CbtTestsScreen extends ConsumerWidget {
         ),
         data: (tests) {
           if (tests.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceLight.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(Icons.quiz_outlined, color: AppColors.slate400, size: 36),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No online tests scheduled',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Computer-based timed tests and quizzes will appear here.',
-                    style: TextStyle(color: AppColors.slate400, fontSize: 13),
-                  ),
-                ],
-              ),
+            return const EmptyState(
+              icon: Icons.quiz_outlined,
+              title: 'No online tests scheduled',
+              subtitle: 'Computer-based timed tests and quizzes will appear here.',
             );
           }
 
@@ -74,14 +54,21 @@ class CbtTestsScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: item.isAttempted
-              ? const Color(0xFF10B981).withValues(alpha: 0.5)
-              : const Color(0xFF334155),
+              ? AppColors.success.withValues(alpha: 0.5)
+              : AppColors.borderLight,
           width: 1.2,
         ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,41 +79,41 @@ class CbtTestsScreen extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                    color: AppColors.skyBlueLight,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     item.subject ?? item.batchName!,
-                    style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: AppColors.skyBlue, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(width: 8),
               ],
               Text('${item.durationMin} mins • ${item.totalMarks} marks',
-                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                  style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
               const Spacer(),
               if (item.isAttempted)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                    color: AppColors.successLight,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     'Score: ${item.myScore}/${item.totalMarks}',
-                    style: const TextStyle(color: Color(0xFF10B981), fontSize: 11, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 )
               else
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                    color: AppColors.warningLight,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: const Text(
                     'Ready to Start',
-                    style: TextStyle(color: Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: AppColors.warning, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
             ],
@@ -134,18 +121,18 @@ class CbtTestsScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           Text(
             item.title,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            style: const TextStyle(color: AppColors.textLight, fontSize: 16, fontWeight: FontWeight.bold),
           ),
           if (item.description != null) ...[
             const SizedBox(height: 4),
-            Text(item.description!, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
+            Text(item.description!, style: const TextStyle(color: AppColors.slate500, fontSize: 13)),
           ],
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.format_list_numbered, size: 14, color: Color(0xFF94A3B8)),
+              const Icon(Icons.format_list_numbered, size: 14, color: AppColors.slate500),
               const SizedBox(width: 4),
-              Text('${item.questionsCount} Questions', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+              Text('${item.questionsCount} Questions', style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
               const Spacer(),
               if (!item.isAttempted)
                 ElevatedButton.icon(
@@ -153,8 +140,8 @@ class CbtTestsScreen extends ConsumerWidget {
                   icon: const Icon(Icons.play_arrow, size: 14),
                   label: const Text('Start Test', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF38BDF8),
-                    foregroundColor: Colors.black,
+                    backgroundColor: AppColors.skyBlue,
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   ),
                 ),
