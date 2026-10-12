@@ -7,7 +7,7 @@ class Endpoints {
 
   // Preset URLs
   static const String cloudflareTunnelUrl =
-      'https://nelson-consist-feels-applicable.trycloudflare.com/api';
+      'https://virgin-tucson-payment-intimate.trycloudflare.com/api';
   static const String localWifiUrl = 'http://10.186.250.171:4000/api';
   static const String emulatorUrl = 'http://10.0.2.2:4000/api';
   static const String localHostUrl = 'http://localhost:4000/api';

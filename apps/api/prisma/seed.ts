@@ -1,52 +1,94 @@
 import { PrismaClient } from '@prisma/client';
+import argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 
-async function main() {
-  console.log('[Seed] Starting database seed...');
+async function resetDemo() {
+  // B4. Guard against running in production
+  if (process.env.NODE_ENV === 'production' && process.env.FORCE_DEMO_RESET !== 'true') {
+    console.error('❌ Refusing to run db:reset-demo in production environment! Set FORCE_DEMO_RESET=true to override.');
+    process.exit(1);
+  }
 
-  // Clean existing tables in reverse order
-  await prisma.chatMessage.deleteMany();
-  await prisma.boardPage.deleteMany();
+  console.log('🌱 Starting Classora 2.0 Demo Reset & Seeding (Clean Data Hygiene)...');
+
+  // Configure SQLite WAL mode & Foreign keys
+  await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL;');
+  await prisma.$queryRawUnsafe('PRAGMA foreign_keys = ON;');
+
+  // Clean all existing tables in dependency order
+  await prisma.payment.deleteMany();
+  await prisma.feePlan.deleteMany();
+  await prisma.testAttempt.deleteMany();
+  await prisma.question.deleteMany();
+  await prisma.test.deleteMany();
+  await prisma.submission.deleteMany();
+  await prisma.assignment.deleteMany();
+  await prisma.recording.deleteMany();
+  await prisma.attendance.deleteMany();
   await prisma.liveClass.deleteMany();
-  await prisma.batchEnrollment.deleteMany();
+  await prisma.timetableSlot.deleteMany();
+  await prisma.enrollment.deleteMany();
   await prisma.batch.deleteMany();
-  await prisma.course.deleteMany();
+  await prisma.invite.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.refreshToken.deleteMany();
+  await prisma.auditLog.deleteMany();
   await prisma.user.deleteMany();
   await prisma.institute.deleteMany();
 
-  // 1. Create Institute
+  // 1. Institute
   const institute = await prisma.institute.create({
     data: {
       id: 'inst-apex-01',
       name: 'Apex IIT-JEE & Medical Academy',
-      subdomain: 'apex',
-      logoUrl: 'https://images.unsplash.com/photo-1546410531-bb4caa6b424d?w=100&h=100&fit=crop',
+      slug: 'apex',
+      plan: 'ENTERPRISE',
     },
   });
+  console.log(`✅ Institute created: ${institute.name} (${institute.id})`);
 
-  // 2. Create Users (Admin, Teachers, Students)
+  // Default password hash using argon2id
+  const defaultPassword = 'Password@123';
+  const defaultPasswordHash = await argon2.hash(defaultPassword, {
+    type: argon2.argon2id,
+    memoryCost: 65536,
+    timeCost: 3,
+    parallelism: 4,
+  });
+
+  // 2. Admin: Dr. S. N. Roy
   const admin = await prisma.user.create({
     data: {
       id: 'usr-admin-01',
       instituteId: institute.id,
-      name: 'Sunil Verma',
-      email: 'admin@classora.com',
+      name: 'Dr. S. N. Roy',
+      email: 'admin@apex.edu',
       phone: '+91 98765 00001',
       role: 'ADMIN',
-      avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&h=120&fit=crop',
+      status: 'ACTIVE',
+      passwordHash: defaultPasswordHash,
     },
   });
+  console.log(`✅ Admin created: ${admin.name} (${admin.email})`);
 
+  // 3. Teachers: Prof. Rajesh Sharma (Physics), Prof. Anita Verma (Maths)
   const teacher1 = await prisma.user.create({
     data: {
       id: 'usr-teacher-01',
       instituteId: institute.id,
       name: 'Prof. Rajesh Sharma',
-      email: 'teacher@classora.com',
+      email: 'teacher1@apex.edu',
       phone: '+91 98765 00002',
       role: 'TEACHER',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&h=120&fit=crop',
+      status: 'ACTIVE',
+      passwordHash: defaultPasswordHash,
+      coachingName: 'Sharma Physics Academy',
+      centreLogo: 'https://cdn.classora.com/logos/sharma_physics.png',
+      centreAddress: 'Plot 42, Knowledge Park III, Greater Noida, UP',
+      contactPhone: '+91 98765 00002',
+      bio: 'Senior Faculty with 18+ years of mentoring top JEE Advanced Physics rankers.',
+      subjects: 'JEE Physics, Mechanics, Waves & Optics',
     },
   });
 
@@ -54,213 +96,217 @@ async function main() {
     data: {
       id: 'usr-teacher-02',
       instituteId: institute.id,
-      name: 'Dr. Kavita Rao',
-      email: 'kavita@classora.com',
+      name: 'Prof. Anita Verma',
+      email: 'teacher2@apex.edu',
       phone: '+91 98765 00003',
       role: 'TEACHER',
-      avatarUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=120&h=120&fit=crop',
+      status: 'ACTIVE',
+      passwordHash: defaultPasswordHash,
+      coachingName: 'Verma Mathematics Hub',
+      centreLogo: 'https://cdn.classora.com/logos/verma_maths.png',
+      centreAddress: 'B-12, Sector 62, Noida, UP',
+      contactPhone: '+91 98765 00003',
+      bio: 'Ex-HOD Mathematics specializing in Differential & Integral Calculus.',
+      subjects: 'JEE Mathematics, Calculus, Coordinate Geometry',
     },
   });
+  console.log(`✅ 2 Teachers created: ${teacher1.name} (Sharma Physics Academy), ${teacher2.name} (Verma Mathematics Hub)`);
 
-  const studentAarav = await prisma.user.create({
-    data: {
-      id: 'usr-student-01',
-      instituteId: institute.id,
-      name: 'Aarav Patel',
-      email: 'student@classora.com',
-      phone: '+91 98765 43210',
-      role: 'STUDENT',
-      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&h=120&fit=crop',
-    },
-  });
+  // 4. Six Students with real names & Teacher Links
+  const studentData = [
+    { id: 'usr-student-01', name: 'Aarav Patel', email: 'student1@apex.edu', phone: '+91 98765 00011', teacherId: teacher1.id },
+    { id: 'usr-student-02', name: 'Priya Sharma', email: 'student2@apex.edu', phone: '+91 98765 00012', teacherId: teacher1.id },
+    { id: 'usr-student-03', name: 'Rohan Verma', email: 'student3@apex.edu', phone: '+91 98765 00013', teacherId: teacher1.id },
+    { id: 'usr-student-04', name: 'Neha Singh', email: 'student4@apex.edu', phone: '+91 98765 00014', teacherId: teacher2.id },
+    { id: 'usr-student-05', name: 'Karan Mehta', email: 'student5@apex.edu', phone: '+91 98765 00015', teacherId: teacher2.id },
+    { id: 'usr-student-06', name: 'Isha Gupta', email: 'student6@apex.edu', phone: '+91 98765 00016', teacherId: teacher2.id },
+  ];
 
-  const studentPriya = await prisma.user.create({
-    data: {
-      id: 'usr-student-02',
-      instituteId: institute.id,
-      name: 'Priya Sharma',
-      email: 'priya@classora.com',
-      phone: '+91 98765 43211',
-      role: 'STUDENT',
-      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&h=120&fit=crop',
-    },
-  });
+  const students = [];
+  for (const st of studentData) {
+    const s = await prisma.user.create({
+      data: {
+        id: st.id,
+        instituteId: institute.id,
+        name: st.name,
+        email: st.email,
+        phone: st.phone,
+        role: 'STUDENT',
+        status: 'ACTIVE',
+        passwordHash: defaultPasswordHash,
+        creatorTeacherId: st.teacherId,
+      },
+    });
+    students.push(s);
+  }
+  console.log(`✅ 6 Students created: ${students.map(s => s.name).join(', ')}`);
 
-  const studentRohan = await prisma.user.create({
+  // 5. Clean Batches
+  const batchPhysics = await prisma.batch.create({
     data: {
-      id: 'usr-student-03',
+      id: 'batch-jee-phy',
       instituteId: institute.id,
-      name: 'Rohan Verma',
-      email: 'rohan@classora.com',
-      phone: '+91 98765 43212',
-      role: 'STUDENT',
-      avatarUrl: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=120&h=120&fit=crop',
-    },
-  });
-
-  const studentAnanya = await prisma.user.create({
-    data: {
-      id: 'usr-student-04',
-      instituteId: institute.id,
-      name: 'Ananya Iyer',
-      email: 'ananya@classora.com',
-      phone: '+91 98765 43213',
-      role: 'STUDENT',
-      avatarUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=120&h=120&fit=crop',
-    },
-  });
-
-  // 3. Create Courses
-  const courseJee = await prisma.course.create({
-    data: {
-      id: 'course-jee',
-      instituteId: institute.id,
-      name: 'IIT-JEE Masterclass 2026',
-      category: 'Engineering',
-      duration: '1 Year Intensive',
-    },
-  });
-
-  const courseNeet = await prisma.course.create({
-    data: {
-      id: 'course-neet',
-      instituteId: institute.id,
-      name: 'NEET Champions 2027',
-      category: 'Medical',
-      duration: '2 Years Comprehensive',
-    },
-  });
-
-  const courseFound = await prisma.course.create({
-    data: {
-      id: 'course-found',
-      instituteId: institute.id,
-      name: 'Foundation Class 10th & Olympiads',
-      category: 'Foundation',
-      duration: '1 Year Academic',
-    },
-  });
-
-  // 4. Create Batches
-  const batchJee = await prisma.batch.create({
-    data: {
-      id: 'batch-jee-12',
-      instituteId: institute.id,
-      courseId: courseJee.id,
-      name: 'Batch A — Class 12th IIT-JEE Masterclass',
       teacherId: teacher1.id,
-      startDate: '2026-04-01',
-      endDate: '2027-03-31',
+      name: 'Class 12 JEE — Physics',
+      subject: 'Physics',
+      joinCode: 'JEEPHY',
     },
   });
 
-  const batchNeet = await prisma.batch.create({
+  const batchMaths = await prisma.batch.create({
     data: {
-      id: 'batch-neet-11',
+      id: 'batch-jee-mth',
       instituteId: institute.id,
-      courseId: courseNeet.id,
-      name: 'Batch B — Class 11th NEET Champions',
+      teacherId: teacher1.id,
+      name: 'Class 12 JEE — Maths',
+      subject: 'Mathematics',
+      joinCode: 'JEEMTH',
+    },
+  });
+
+  const batchChemistry = await prisma.batch.create({
+    data: {
+      id: 'batch-neet-chm',
+      instituteId: institute.id,
       teacherId: teacher2.id,
-      startDate: '2026-05-01',
-      endDate: '2028-04-30',
+      name: 'Class 11 NEET — Chemistry',
+      subject: 'Chemistry',
+      joinCode: 'NEETCH',
     },
   });
+  console.log(`✅ 3 Batches created: ${batchPhysics.name}, ${batchMaths.name}, ${batchChemistry.name}`);
 
-  const batchFound = await prisma.batch.create({
-    data: {
-      id: 'batch-found-10',
-      instituteId: institute.id,
-      courseId: courseFound.id,
-      name: 'Batch C — Class 10th Board & NTSE',
-      teacherId: teacher1.id,
-      startDate: '2026-04-15',
-      endDate: '2027-03-15',
-    },
-  });
+  // 6. Enrollments: Students 1-3 to Teacher 1 batches (Physics & Maths), Students 4-6 to Teacher 2 batch (Chemistry)
+  const enrollmentsMap = [
+    { batchId: batchPhysics.id, studentIds: ['usr-student-01', 'usr-student-02', 'usr-student-03'] },
+    { batchId: batchMaths.id, studentIds: ['usr-student-01', 'usr-student-02', 'usr-student-03'] },
+    { batchId: batchChemistry.id, studentIds: ['usr-student-04', 'usr-student-05', 'usr-student-06'] },
+  ];
 
-  // 5. Enroll Students into Batches
-  // Aarav -> Batch A (JEE 12th)
-  await prisma.batchEnrollment.create({
-    data: {
-      batchId: batchJee.id,
-      studentId: studentAarav.id,
-      rollNumber: 'JEE-12-001',
-    },
-  });
+  for (const group of enrollmentsMap) {
+    for (const sId of group.studentIds) {
+      await prisma.enrollment.create({
+        data: {
+          instituteId: institute.id,
+          batchId: group.batchId,
+          studentId: sId,
+          status: 'ACTIVE',
+        },
+      });
+    }
+  }
+  console.log('✅ Enrollments created (Aarav Patel & Priya Sharma enrolled in both Physics and Maths).');
 
-  // Rohan -> Batch A (JEE 12th) AND Batch C (Foundation)
-  await prisma.batchEnrollment.create({
-    data: {
-      batchId: batchJee.id,
-      studentId: studentRohan.id,
-      rollNumber: 'JEE-12-002',
-    },
-  });
+  // 7. Timetable slots Mon-Fri (1 = Monday, 5 = Friday)
+  for (let day = 1; day <= 5; day++) {
+    // Physics: 09:00 - 10:00 (540 to 600 min)
+    await prisma.timetableSlot.create({
+      data: {
+        instituteId: institute.id,
+        teacherId: teacher1.id,
+        batchId: batchPhysics.id,
+        dayOfWeek: day,
+        startMin: 540,
+        endMin: 600,
+        recurring: true,
+      },
+    });
 
-  // Priya -> Batch B (NEET 11th)
-  await prisma.batchEnrollment.create({
-    data: {
-      batchId: batchNeet.id,
-      studentId: studentPriya.id,
-      rollNumber: 'NEET-11-001',
-    },
-  });
+    // Maths: 10:30 - 11:30 (630 to 690 min)
+    await prisma.timetableSlot.create({
+      data: {
+        instituteId: institute.id,
+        teacherId: teacher1.id,
+        batchId: batchMaths.id,
+        dayOfWeek: day,
+        startMin: 630,
+        endMin: 690,
+        recurring: true,
+      },
+    });
 
-  // Ananya -> Batch B (NEET 11th)
-  await prisma.batchEnrollment.create({
-    data: {
-      batchId: batchNeet.id,
-      studentId: studentAnanya.id,
-      rollNumber: 'NEET-11-002',
-    },
-  });
+    // Chemistry: 16:00 - 17:00 (960 to 1020 min)
+    await prisma.timetableSlot.create({
+      data: {
+        instituteId: institute.id,
+        teacherId: teacher2.id,
+        batchId: batchChemistry.id,
+        dayOfWeek: day,
+        startMin: 960,
+        endMin: 1020,
+        recurring: true,
+      },
+    });
+  }
+  console.log('✅ Mon-Fri Timetable slots created (Physics 09:00, Maths 10:30, Chemistry 16:00).');
 
-  // 6. Create Seed Live Classes
+  // 8. Scheduled classes for today (UTC stored, displayed in Asia/Kolkata)
   const now = new Date();
-  const scheduledTime1 = new Date(now.getTime() - 10 * 60000); // 10 mins ago (ready to go live!)
-  const scheduledTime2 = new Date(now.getTime() + 2 * 3600000); // 2 hours later
+  // Class 1: Today at 2 hours from now
+  const class1Time = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  const class2Time = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+  const class3Time = new Date(now.getTime() + 5 * 60 * 60 * 1000);
 
-  await prisma.liveClass.create({
+  const liveClass1 = await prisma.liveClass.create({
     data: {
-      id: 'live-class-01',
+      id: 'class-demo-phy-01',
       instituteId: institute.id,
-      batchId: batchJee.id,
+      batchId: batchPhysics.id,
       teacherId: teacher1.id,
       title: 'Electromagnetic Induction & Faraday’s Laws',
-      subject: 'Physics',
-      chapter: 'Electrodynamics — Unit 4',
-      roomId: 'room-jee-101',
+      scheduledAt: class1Time,
       status: 'SCHEDULED',
-      scheduledAt: scheduledTime1,
+      livekitRoom: 'room-jee-phy-01',
     },
   });
 
-  await prisma.liveClass.create({
+  const liveClass2 = await prisma.liveClass.create({
     data: {
-      id: 'live-class-02',
+      id: 'class-demo-mth-01',
       instituteId: institute.id,
-      batchId: batchNeet.id,
-      teacherId: teacher2.id,
-      title: 'Human Physiology: Cardiac Cycle & ECG',
-      subject: 'Biology',
-      chapter: 'Circulatory Systems — Chapter 18',
-      roomId: 'room-neet-202',
+      batchId: batchMaths.id,
+      teacherId: teacher1.id,
+      title: 'Calculus: Integration by Parts & Definite Integrals',
+      scheduledAt: class2Time,
       status: 'SCHEDULED',
-      scheduledAt: scheduledTime2,
+      livekitRoom: 'room-jee-mth-01',
     },
   });
 
-  console.log('[Seed] Database seeded successfully with:');
-  console.log(`- 1 Institute (${institute.name})`);
-  console.log(`- 1 Admin, 2 Teachers, 4 Students`);
-  console.log(`- 3 Courses, 3 Batches with assigned teachers`);
-  console.log(`- Students enrolled in specific Batches`);
-  console.log(`- 2 Scheduled Live Classes`);
+  const liveClass3 = await prisma.liveClass.create({
+    data: {
+      id: 'class-demo-chm-01',
+      instituteId: institute.id,
+      batchId: batchChemistry.id,
+      teacherId: teacher2.id,
+      title: 'Organic Chemistry: Reaction Mechanisms & Pathways',
+      scheduledAt: class3Time,
+      status: 'SCHEDULED',
+      livekitRoom: 'room-neet-chm-01',
+    },
+  });
+  console.log(`✅ 3 Live Classes created for today: ${liveClass1.title}, ${liveClass2.title}, ${liveClass3.title}`);
+
+  // 9. Output demo credentials
+  console.log('\n====================================================================');
+  console.log('DEMO ACCOUNTS (TEST ONLY - DO NOT USE IN PRODUCTION):');
+  console.log('Password for all accounts: ' + defaultPassword);
+  console.log('--------------------------------------------------------------------');
+  console.log('Admin:       admin@apex.edu');
+  console.log('Teacher 1:   teacher1@apex.edu (Prof. Rajesh Sharma - Physics)');
+  console.log('Teacher 2:   teacher2@apex.edu (Prof. Anita Verma - Maths)');
+  console.log('Student 1:   student1@apex.edu (Aarav Patel - Enrolled: Phy + Mth)');
+  console.log('Student 2:   student2@apex.edu (Priya Sharma - Enrolled: Phy + Mth)');
+  console.log('Student 3:   student3@apex.edu (Rohan Verma - Enrolled: Phy + Chm)');
+  console.log('Student 4:   student4@apex.edu (Neha Singh - Enrolled: Mth + Chm)');
+  console.log('Student 5:   student5@apex.edu (Karan Mehta - Enrolled: Phy)');
+  console.log('Student 6:   student6@apex.edu (Isha Gupta - Enrolled: Mth)');
+  console.log('====================================================================\n');
 }
 
-main()
+resetDemo()
   .catch((e) => {
-    console.error('[Seed] Error during seeding:', e);
+    console.error('❌ Reset Demo error:', e);
     process.exit(1);
   })
   .finally(async () => {

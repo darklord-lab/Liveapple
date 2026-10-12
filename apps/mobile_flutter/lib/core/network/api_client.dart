@@ -92,13 +92,28 @@ class ApiClient {
             }
           }
 
+          // Handle Cloudflare transient tunnel 530/502/503 reconnection blips
+          final statusCode = error.response?.statusCode;
+          final retryCount = (error.requestOptions.extra['retry_count'] as int?) ?? 0;
+          if ((statusCode == 530 || statusCode == 502 || statusCode == 503) && retryCount < 2) {
+            error.requestOptions.extra['retry_count'] = retryCount + 1;
+            await Future.delayed(const Duration(milliseconds: 1200));
+            try {
+              final retryRes = await dio.fetch(error.requestOptions);
+              return handler.resolve(retryRes);
+            } catch (_) {}
+          }
+
           // Format to AppException
           final responseData = error.response?.data;
           String code = 'NETWORK_ERROR';
           String message = error.message ?? 'An unexpected network error occurred';
           dynamic details;
 
-          if (error.type == DioExceptionType.connectionTimeout ||
+          if (statusCode == 530 || statusCode == 502 || statusCode == 503) {
+            code = 'TUNNEL_RECONNECTING';
+            message = 'Connection was momentarily interrupted while joining. Please tap "Try Again".';
+          } else if (error.type == DioExceptionType.connectionTimeout ||
               error.type == DioExceptionType.sendTimeout ||
               error.type == DioExceptionType.receiveTimeout) {
             code = 'CONNECTION_TIMEOUT';

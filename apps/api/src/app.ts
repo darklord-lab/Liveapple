@@ -1,6 +1,8 @@
 import express, { Express } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
 import { env } from './config/env.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import { apiLimiter } from './middlewares/rateLimiter.js';
@@ -14,7 +16,7 @@ export function createApp(): Express {
   app.set('trust proxy', 1);
 
   // 1. Security Headers
-  app.use(helmet());
+  app.use(helmet({ contentSecurityPolicy: false }));
 
   // 2. CORS Allowlist
   const allowedOrigins = env.CORS_ORIGINS.split(',').map((o) => o.trim());
@@ -47,12 +49,29 @@ export function createApp(): Express {
   // 5. API Routes
   app.use('/api', routes);
 
-  // 6. 404 Catch-All
+  // 6. Serve Web Admin Console
+  const candidatePaths = [
+    path.resolve(process.cwd(), '../../_archive/admin/dist'),
+    path.resolve(process.cwd(), '../_archive/admin/dist'),
+    path.resolve(process.cwd(), '_archive/admin/dist'),
+  ];
+  const adminDist = candidatePaths.find((p) => fs.existsSync(p));
+  if (adminDist) {
+    app.use('/admin', express.static(adminDist));
+    app.get('/admin', (_req, res) => {
+      res.sendFile(path.join(adminDist, 'index.html'));
+    });
+    app.get('/admin/*', (_req, res) => {
+      res.sendFile(path.join(adminDist, 'index.html'));
+    });
+  }
+
+  // 7. 404 Catch-All
   app.use((_req, _res, next) => {
     next(new AppError('NOT_FOUND', 'The requested resource was not found on this server', 404));
   });
 
-  // 7. Global Error Handler
+  // 8. Global Error Handler
   app.use(errorHandler);
 
   return app;

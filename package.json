@@ -3,25 +3,13 @@
   "version": "2.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n \"API,MKTG,ADMN,TCHR,STUD\" -c \"bgBlue.bold,bgMagenta.bold,bgCyan.bold,bgGreen.bold,bgYellow.bold\" \"npm.cmd run dev:api\" \"npm.cmd run dev:marketing\" \"npm.cmd run dev:admin\" \"npm.cmd run dev:teacher\" \"npm.cmd run dev:student\"",
-    "dev:api": "npm.cmd --prefix apps/api run dev",
-    "dev:marketing": "npm.cmd --prefix apps/marketing run dev",
-    "dev:admin": "npm.cmd --prefix apps/admin run dev",
-    "dev:teacher": "npm.cmd --prefix apps/teacher run dev",
-    "dev:student": "npm.cmd --prefix apps/student run dev"
+    "dev": "npm --prefix apps/api run dev",
+    "dev:api": "npm --prefix apps/api run dev",
+    "test": "npm --prefix apps/api test",
+    "test:api": "npm --prefix apps/api test",
+    "db:reset-demo": "npm --prefix apps/api run db:reset-demo"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
-  },
-  "dependencies": {
-    "@vitejs/plugin-react": "^6.1.1",
-    "autoprefixer": "^10.5.5",
-    "lucide-react": "^1.16.0",
-    "postcss": "^8.5.28",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "socket.io-client": "^4.7.5",
-    "tailwindcss": "^3.4.17",
-    "vite": "^8.2.2"
   }
 }
