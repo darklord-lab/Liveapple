@@ -16,6 +16,20 @@ class AddTimetableSlotDialog extends ConsumerStatefulWidget {
     this.preselectedDay,
   });
 
+  static Future<bool?> show(
+    BuildContext context, {
+    String? preselectedBatchId,
+    int? preselectedDay,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AddTimetableSlotDialog(
+        preselectedBatchId: preselectedBatchId,
+        preselectedDay: preselectedDay,
+      ),
+    );
+  }
+
   @override
   ConsumerState<AddTimetableSlotDialog> createState() => _AddTimetableSlotDialogState();
 }
@@ -154,10 +168,11 @@ class _AddTimetableSlotDialogState extends ConsumerState<AddTimetableSlotDialog>
       child: Container(
         padding: const EdgeInsets.all(24),
         constraints: const BoxConstraints(maxWidth: 480),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Row(
               children: [
                 Container(
@@ -338,6 +353,7 @@ class _AddTimetableSlotDialogState extends ConsumerState<AddTimetableSlotDialog>
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

@@ -4,17 +4,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../auth/presentation/auth_controller.dart';
+import '../../../core/widgets/color_tile.dart';
+import '../../../core/widgets/confirm_dialog.dart';
+import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/status_pill.dart';
 import '../../auth/domain/user_model.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../../batch/presentation/batch_controller.dart';
-import '../../batch/presentation/create_batch_dialog.dart';
+import '../../batch/presentation/batch_detail_screen.dart';
 import '../../batch/presentation/batch_students_dialog.dart';
-import '../../timetable/presentation/timetable_controller.dart';
-import '../../timetable/presentation/add_timetable_slot_dialog.dart';
-import '../../timetable/domain/timetable_model.dart';
-import '../../liveclass/presentation/live_class_controller.dart';
+import '../../batch/presentation/create_batch_dialog.dart';
 import '../../liveclass/domain/live_class_model.dart';
+import '../../liveclass/presentation/live_class_controller.dart';
 import '../../notifications/presentation/widgets/notification_bell_button.dart';
+import '../../timetable/domain/timetable_model.dart';
+import '../../timetable/presentation/add_timetable_slot_dialog.dart';
+import '../../timetable/presentation/timetable_controller.dart';
 
 class TeacherHomeScreen extends ConsumerStatefulWidget {
   final UserModel user;
@@ -27,7 +32,8 @@ class TeacherHomeScreen extends ConsumerStatefulWidget {
 
 class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
   int _currentBottomNavIndex = 0; // 0: Home, 1: Timetable, 2: Batches, 3: Profile
-  bool _showPastClasses = false;
+  String _liveClassFilter = 'ALL'; // 'ALL', 'LIVE', 'SCHEDULED', 'PAST'
+  bool _isGeneratingSlots = false;
 
   // Settings switches
   bool _classReminders = true;
@@ -51,99 +57,123 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
   }
 
   void _showAddSlot({String? batchId, int? day}) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AddTimetableSlotDialog(
-        preselectedBatchId: batchId,
-        preselectedDay: day,
-      ),
+    AddTimetableSlotDialog.show(
+      context,
+      preselectedBatchId: batchId,
+      preselectedDay: day,
     );
+  }
+
+  Future<void> _generateClassesFromSlots() async {
+    setState(() => _isGeneratingSlots = true);
+    try {
+      final res = await ref.read(liveClassProvider.notifier).generateUpcoming(daysAhead: 7);
+      final count = res['classesCreated'] ?? res['created'] ?? 0;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully synced $count live classes from timetable slots!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate classes: $e'),
+            backgroundColor: AppColors.liveRed,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingSlots = false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final instituteName = widget.user.institute?.name ?? 'Apex IIT-JEE Academy';
+    final instituteName = widget.user.institute?.name ?? 'Classora Academy';
 
     return Theme(
       data: AppTheme.lightTheme,
       child: Scaffold(
         backgroundColor: AppColors.backgroundLight,
-        // Sky-blue App Bar matching Reference UI
         appBar: AppBar(
-        backgroundColor: AppColors.skyBlue,
-        elevation: 0,
-        centerTitle: false,
-        iconTheme: const IconThemeData(color: Colors.white),
-        leading: Builder(
-          builder: (ctx) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.white),
-            tooltip: 'Menu',
-            onPressed: () => Scaffold.of(ctx).openDrawer(),
-          ),
-        ),
-        title: Text(
-          _currentBottomNavIndex == 0
-              ? instituteName
-              : _currentBottomNavIndex == 1
-                  ? 'Timetable Manager'
-                  : _currentBottomNavIndex == 2
-                      ? 'My Batches'
-                      : 'Faculty Profile',
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 17,
-          ),
-        ),
-        actions: [
-          const NotificationBellButton(),
-          const SizedBox(width: 8),
-        ],
-      ),
-      // Drawer matching Reference UI
-      drawer: _buildDrawer(),
-      body: IndexedStack(
-        index: _currentBottomNavIndex,
-        children: [
-          _buildHomeTab(),
-          _buildTimetableTab(),
-          _buildBatchesTab(),
-          _buildProfileTab(),
-        ],
-      ),
-      // 4-Tab Bottom Navigation Bar
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: AppColors.borderLight, width: 0.8)),
-          boxShadow: [
-            BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, -1)),
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _currentBottomNavIndex,
-          onTap: (idx) {
-            setState(() {
-              _currentBottomNavIndex = idx;
-            });
-          },
-          backgroundColor: Colors.white,
-          selectedItemColor: AppColors.skyBlue,
-          unselectedItemColor: AppColors.slate400,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-          unselectedLabelStyle: const TextStyle(fontSize: 11),
-          type: BottomNavigationBarType.fixed,
+          backgroundColor: AppColors.skyBlue,
           elevation: 0,
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.calendar_month_outlined), label: 'Timetable'),
-            BottomNavigationBarItem(icon: Icon(Icons.school_outlined), label: 'Batches'),
-            BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
+          centerTitle: false,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.menu, color: Colors.white),
+              tooltip: 'Menu',
+              onPressed: () => Scaffold.of(ctx).openDrawer(),
+            ),
+          ),
+          title: Text(
+            _currentBottomNavIndex == 0
+                ? instituteName
+                : _currentBottomNavIndex == 1
+                    ? 'Timetable Manager'
+                    : _currentBottomNavIndex == 2
+                        ? 'My Batches'
+                        : 'Faculty Profile',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 17,
+            ),
+          ),
+          actions: [
+            const NotificationBellButton(),
+            const SizedBox(width: 8),
           ],
         ),
+        drawer: _buildDrawer(),
+        body: IndexedStack(
+          index: _currentBottomNavIndex,
+          children: [
+            _buildHomeTab(),
+            _buildTimetableTab(),
+            _buildBatchesTab(),
+            _buildProfileTab(),
+          ],
+        ),
+        bottomNavigationBar: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: AppColors.borderLight, width: 0.8)),
+            boxShadow: [
+              BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, -1)),
+            ],
+          ),
+          child: BottomNavigationBar(
+            currentIndex: _currentBottomNavIndex,
+            onTap: (idx) {
+              setState(() {
+                _currentBottomNavIndex = idx;
+              });
+            },
+            backgroundColor: Colors.white,
+            selectedItemColor: AppColors.skyBlue,
+            unselectedItemColor: AppColors.slate400,
+            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+            unselectedLabelStyle: const TextStyle(fontSize: 11),
+            type: BottomNavigationBarType.fixed,
+            elevation: 0,
+            items: const [
+              BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
+              BottomNavigationBarItem(icon: Icon(Icons.calendar_month_outlined), label: 'Timetable'),
+              BottomNavigationBarItem(icon: Icon(Icons.school_outlined), label: 'Batches'),
+              BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
+            ],
+          ),
+        ),
       ),
-    ),
-  );
+    );
   }
 
   /* -------------------------------------------------------------------------- */
@@ -159,7 +189,6 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
       child: SafeArea(
         child: Column(
           children: [
-            // Header
             Container(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
               decoration: const BoxDecoration(
@@ -167,19 +196,24 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
               ),
               child: Row(
                 children: [
-                  const CircleAvatar(
-                    radius: 30,
-                    backgroundColor: AppColors.slate200,
-                    child: Icon(Icons.person_outline, size: 36, color: AppColors.slate500),
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundColor: AppColors.skyBlueLight,
+                    child: Text(
+                      widget.user.name.isNotEmpty ? widget.user.name[0].toUpperCase() : 'F',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.skyBlue),
+                    ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           widget.user.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: AppColors.textLight),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textLight),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 3),
                         Text(
@@ -192,8 +226,6 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                 ],
               ),
             ),
-
-            // Menu Items
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -219,12 +251,23 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                     label: 'Live Classes',
                     onTap: () {
                       Navigator.pop(context);
-                      setState(() => _currentBottomNavIndex = 0);
+                      setState(() {
+                        _currentBottomNavIndex = 0;
+                        _liveClassFilter = 'LIVE';
+                      });
                     },
                   ),
                   _buildDrawerItem(
-                    icon: Icons.edit_note_outlined,
-                    label: 'Assignments',
+                    icon: Icons.menu_book_outlined,
+                    label: 'Study Material & Notes',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/assignments');
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.assignment_outlined,
+                    label: 'Assignments & Homework',
                     onTap: () {
                       Navigator.pop(context);
                       context.push('/assignments');
@@ -263,27 +306,46 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                       _showHelpDialog();
                     },
                   ),
+                  _buildDrawerItem(
+                    icon: Icons.logout,
+                    label: 'Sign Out',
+                    textColor: AppColors.liveRed,
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final confirmed = await ConfirmDialog.show(
+                        context,
+                        title: 'Sign Out',
+                        message: 'Are you sure you want to sign out from Classora?',
+                        confirmText: 'Sign Out',
+                        isDestructive: true,
+                      );
+                      if (confirmed == true) {
+                        ref.read(authStateProvider.notifier).logout();
+                      }
+                    },
+                  ),
                 ],
               ),
             ),
-
-            // Share App Button
             Padding(
               padding: const EdgeInsets.all(16),
               child: SizedBox(
                 width: double.infinity,
-                height: 46,
-                child: ElevatedButton(
+                height: 44,
+                child: ElevatedButton.icon(
                   onPressed: () {
+                    Clipboard.setData(const ClipboardData(text: 'Classora Faculty App: Connect, teach and lead your cohorts.'));
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Classora Faculty invite link copied!')),
                     );
                   },
+                  icon: const Icon(Icons.share, size: 16, color: Colors.white),
+                  label: const Text('Share App', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.skyBlue,
+                    elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Share app', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
                 ),
               ),
             ),
@@ -297,11 +359,12 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    Color? textColor,
   }) {
     return ListTile(
       dense: true,
-      leading: Icon(icon, color: AppColors.slate700, size: 20),
-      title: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textLight)),
+      leading: Icon(icon, color: textColor ?? AppColors.slate700, size: 20),
+      title: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: textColor ?? AppColors.textLight)),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 20),
     );
@@ -313,15 +376,33 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
   Widget _buildHomeTab() {
     final liveClassState = ref.watch(liveClassProvider);
     final timetableState = ref.watch(timetableProvider);
+    final batchState = ref.watch(batchListProvider);
+
     final activeLiveClass = liveClassState.classes.cast<LiveClassModel?>().firstWhere(
           (c) => c != null && c.isLive,
           orElse: () => null,
         );
-    final upcoming = liveClassState.classes.where((c) => !c.isEnded).toList();
+    final upcomingClasses = liveClassState.classes.where((c) => c.isScheduled).toList();
 
-    // Map today's timetable slots (dayOfWeek: 0 = Sun, 1 = Mon, 2 = Tue, ..., 6 = Sat)
     final todayWeekday = DateTime.now().weekday % 7;
     final todaySlots = timetableState.slots.where((s) => s.dayOfWeek == todayWeekday).toList();
+
+    // Stats
+    final totalStudents = batchState.batches.fold<int>(0, (sum, b) => sum + b.activeStudentsCount);
+    final totalBatches = batchState.batches.length;
+    final weeklySlots = timetableState.slots.length;
+
+    // Filtered classes list
+    final List<LiveClassModel> displayedClasses;
+    if (_liveClassFilter == 'LIVE') {
+      displayedClasses = liveClassState.classes.where((c) => c.isLive).toList();
+    } else if (_liveClassFilter == 'SCHEDULED') {
+      displayedClasses = liveClassState.classes.where((c) => c.isScheduled).toList();
+    } else if (_liveClassFilter == 'PAST') {
+      displayedClasses = liveClassState.classes.where((c) => c.isEnded).toList();
+    } else {
+      displayedClasses = liveClassState.classes;
+    }
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -335,11 +416,11 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Hero Card (Start Live Class / Go Live)
+            // 1. Hero Card
             if (activeLiveClass != null)
               _buildTeacherLiveHero(activeLiveClass)
-            else if (upcoming.isNotEmpty)
-              _buildTeacherUpcomingHero(upcoming.first)
+            else if (upcomingClasses.isNotEmpty)
+              _buildTeacherUpcomingHero(upcomingClasses.first)
             else if (todaySlots.isNotEmpty)
               _buildTeacherSlotHero(todaySlots.first)
             else
@@ -347,39 +428,29 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
 
             const SizedBox(height: 18),
 
-            // 2. Quick Access (2x2 Coloured Tiles)
+            // 2. 2x3 ColorTiles per DESIGN.md
             const Text(
-              'Quick access',
+              'Quick Access',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textLight),
             ),
             const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
-                  child: _buildColouredTile(
-                    title: 'Start\nLive Class',
-                    color: AppColors.tileSchedule,
-                    icon: Icons.sensors,
-                    onTap: () {
-                      if (upcoming.isNotEmpty) {
-                        _startOrEnterClass(upcoming.first);
-                      } else if (todaySlots.isNotEmpty) {
-                        _startSlotClass(todaySlots.first);
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please schedule a class from Timetable or Batches first')),
-                        );
-                      }
-                    },
+                  child: ColorTile(
+                    title: 'Batches',
+                    color: AppColors.tileBatches,
+                    icon: Icons.school,
+                    onTap: () => setState(() => _currentBottomNavIndex = 2),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _buildColouredTile(
-                    title: 'My\nBatches',
-                    color: AppColors.tileMaterial,
-                    icon: Icons.school,
-                    onTap: () => setState(() => _currentBottomNavIndex = 2),
+                  child: ColorTile(
+                    title: 'Timetable',
+                    color: AppColors.tileSchedule,
+                    icon: Icons.calendar_month,
+                    onTap: () => setState(() => _currentBottomNavIndex = 1),
                   ),
                 ),
               ],
@@ -388,101 +459,157 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
             Row(
               children: [
                 Expanded(
-                  child: _buildColouredTile(
-                    title: 'Timetable\nSlots',
+                  child: ColorTile(
+                    title: 'Live Classes',
                     color: AppColors.tileRecordings,
-                    icon: Icons.calendar_month,
-                    onTap: () => setState(() => _currentBottomNavIndex = 1),
+                    icon: Icons.sensors,
+                    onTap: () {
+                      setState(() => _liveClassFilter = 'LIVE');
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _buildColouredTile(
-                    title: 'Create\nBatch',
-                    color: AppColors.tileBatches,
-                    icon: Icons.add_circle_outline,
-                    onTap: _showCreateBatch,
+                  child: ColorTile(
+                    title: 'Study Material',
+                    color: AppColors.tileMaterial,
+                    icon: Icons.menu_book,
+                    onTap: () => context.push('/assignments'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ColorTile(
+                    title: 'Assignments\n& Tests',
+                    color: const Color(0xFF4F46E5),
+                    icon: Icons.assignment_outlined,
+                    onTap: () => context.push('/assignments'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ColorTile(
+                    title: 'Recordings',
+                    color: AppColors.skyBlue,
+                    icon: Icons.videocam_outlined,
+                    onTap: () => context.push('/recordings'),
                   ),
                 ),
               ],
             ),
 
-            const SizedBox(height: 22),
+            const SizedBox(height: 20),
 
-            // 3. Learning Hub Quick Chips (Removed CBT Quizzes as requested, renamed to Study Material & Notes)
-            const Text(
-              'Faculty Modules',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textLight),
+            // 3. Faculty Stats Row
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    title: 'Students',
+                    value: '$totalStudents',
+                    icon: Icons.people_outline,
+                    color: AppColors.skyBlue,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildStatCard(
+                    title: 'Batches',
+                    value: '$totalBatches',
+                    icon: Icons.school_outlined,
+                    color: AppColors.tileBatches,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildStatCard(
+                    title: 'Weekly Slots',
+                    value: '$weeklySlots',
+                    icon: Icons.schedule_outlined,
+                    color: AppColors.tileRecordings,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildQuickModuleChip(icon: Icons.menu_book_rounded, label: 'Study Material & Notes', color: Colors.purple, route: '/assignments'),
-                  const SizedBox(width: 8),
-                  _buildQuickModuleChip(icon: Icons.videocam_outlined, label: 'Recordings', color: AppColors.skyBlue, route: '/recordings'),
-                  const SizedBox(width: 8),
-                  _buildQuickModuleChip(icon: Icons.how_to_reg_outlined, label: 'Attendance', color: AppColors.success, route: '/attendance'),
-                ],
-              ),
-            ),
 
-            const SizedBox(height: 22),
+            const SizedBox(height: 24),
 
-            // 4. Scheduled Classes for Faculty
+            // 4. Live & Scheduled Classes Header + Generate Button
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Scheduled Classes',
+                  'Live & Scheduled Sessions',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textLight),
                 ),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _showPastClasses = !_showPastClasses;
-                    });
-                  },
-                  child: Text(
-                    _showPastClasses ? 'Hide Past' : 'Show Past',
-                    style: const TextStyle(fontSize: 12, color: AppColors.skyBlue, fontWeight: FontWeight.bold),
+                InkWell(
+                  onTap: _isGeneratingSlots ? null : _generateClassesFromSlots,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.skyBlueLight,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isGeneratingSlots)
+                          const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.skyBlue),
+                          )
+                        else
+                          const Icon(Icons.sync, size: 14, color: AppColors.skyBlue),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Sync from slots',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.skyBlue),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
 
+            // Filter Chips
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildFilterChip('ALL', 'All (${liveClassState.classes.length})'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('LIVE', 'Live (${liveClassState.classes.where((c) => c.isLive).length})'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('SCHEDULED', 'Upcoming (${liveClassState.classes.where((c) => c.isScheduled).length})'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('PAST', 'Past (${liveClassState.classes.where((c) => c.isEnded).length})'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Classes List
             if (liveClassState.isLoading)
               const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
-            else if (upcoming.isEmpty && todaySlots.isEmpty && !_showPastClasses)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.borderLight),
-                ),
-                child: const Center(
-                  child: Text(
-                    'No pending classes for today. Use Timetable tab to add slots.',
-                    style: TextStyle(color: AppColors.slate500, fontSize: 13),
-                  ),
-                ),
+            else if (displayedClasses.isEmpty)
+              EmptyState(
+                icon: Icons.videocam_off_outlined,
+                title: 'No $_liveClassFilter classes found',
+                subtitle: 'Use "Sync from slots" or Timetable tab to schedule sessions',
+                buttonText: 'Sync Classes Now',
+                onAction: _generateClassesFromSlots,
               )
-            else ...[
-              if (_showPastClasses)
-                ...liveClassState.classes.map((cls) => _buildClassCard(cls))
-              else ...[
-                // Active or Upcoming Classes
-                ...upcoming.map((cls) => _buildClassCard(cls)),
-                // Today's Timetable slots not yet started as LiveClass
-                ...todaySlots
-                    .where((slot) => !upcoming.any((cls) => cls.batchId == slot.batchId))
-                    .map((slot) => _buildSlotCard(slot)),
-              ],
-            ],
+            else
+              ...displayedClasses.map((cls) => _buildClassCard(cls)),
 
             const SizedBox(height: 20),
           ],
@@ -491,132 +618,117 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
     );
   }
 
-  Widget _buildSlotCard(TimetableSlotModel slot) {
+  Widget _buildFilterChip(String filterKey, String label) {
+    final isSelected = _liveClassFilter == filterKey;
+    return InkWell(
+      onTap: () => setState(() => _liveClassFilter = filterKey),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.skyBlue : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? AppColors.skyBlue : AppColors.borderLight),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? Colors.white : AppColors.slate700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.textLight),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassCard(LiveClassModel cls) {
+    final status = cls.isLive
+        ? ClassStatus.live
+        : cls.isScheduled
+            ? ClassStatus.upcoming
+            : ClassStatus.ended;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.3)),
+        border: Border.all(color: cls.isLive ? AppColors.liveRed.withValues(alpha: 0.5) : AppColors.borderLight),
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.skyBlueLight,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              '${TimetableSlotModel.formatMinutes(slot.startMin)} - ${TimetableSlotModel.formatMinutes(slot.endMin)}',
-              style: const TextStyle(color: AppColors.skyBlue, fontSize: 10, fontWeight: FontWeight.bold),
-            ),
-          ),
+          StatusPill(status: status),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  slot.batchName ?? 'Batch',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  cls.title,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textLight),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  '${slot.subject ?? 'Subject'} • Today (${slot.durationString})',
+                  '${cls.batchName ?? 'Batch'} • ${cls.formattedDate} • ${cls.formattedTime}',
                   style: const TextStyle(fontSize: 11, color: AppColors.slate500),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
           ElevatedButton(
-            onPressed: () => _startSlotClass(slot),
+            onPressed: () => _startOrEnterClass(cls),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.skyBlue,
+              backgroundColor: cls.isLive ? AppColors.liveRed : AppColors.skyBlue,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Text('Start', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            child: Text(
+              cls.isLive ? 'Enter Room' : 'Start',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildTeacherSlotHero(TimetableSlotModel slot) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.3)),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: AppColors.skyBlueLight, borderRadius: BorderRadius.circular(12)),
-                child: Text('TODAY AT ${TimetableSlotModel.formatMinutes(slot.startMin)}', style: const TextStyle(color: AppColors.skyBlue, fontWeight: FontWeight.bold, fontSize: 11)),
-              ),
-              Text('${slot.subject ?? 'Subject'} • ${slot.durationString}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.slate500)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(slot.batchName ?? 'Batch', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    Text('Scheduled slot: ${TimetableSlotModel.formatMinutes(slot.startMin)} to ${TimetableSlotModel.formatMinutes(slot.endMin)}', style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
-                  ],
-                ),
-              ),
-              ElevatedButton.icon(
-                onPressed: () => _startSlotClass(slot),
-                icon: const Icon(Icons.play_arrow, size: 16, color: Colors.white),
-                label: const Text('Start Class', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _startSlotClass(TimetableSlotModel slot) async {
-    try {
-      final liveClassState = ref.read(liveClassProvider);
-      final existing = liveClassState.classes.where((c) => c.batchId == slot.batchId && !c.isEnded).firstOrNull;
-      if (existing != null) {
-        await _startOrEnterClass(existing);
-        return;
-      }
-
-      final newCls = await ref.read(liveClassProvider.notifier).createClass(
-        batchId: slot.batchId,
-        title: '${slot.subject ?? 'Live'}: ${slot.batchName ?? 'Class'}',
-        scheduledAt: DateTime.now().toIso8601String(),
-      );
-      await ref.read(liveClassProvider.notifier).startClass(newCls.id);
-      if (mounted) {
-        context.push('/live/${newCls.id}');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not start slot class: $e')),
-        );
-      }
-    }
   }
 
   Widget _buildTeacherLiveHero(LiveClassModel cls) {
@@ -625,7 +737,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.liveRed.withValues(alpha: 0.4)),
+        border: Border.all(color: AppColors.liveRed.withValues(alpha: 0.5)),
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: Column(
@@ -634,17 +746,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: AppColors.liveRed, borderRadius: BorderRadius.circular(12)),
-                child: const Row(
-                  children: [
-                    Icon(Icons.fiber_manual_record, color: Colors.white, size: 8),
-                    SizedBox(width: 4),
-                    Text('YOU ARE LIVE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10)),
-                  ],
-                ),
-              ),
+              const StatusPill(status: ClassStatus.live, customText: 'YOU ARE LIVE'),
               Text('${cls.attendanceCount} Students Connected', style: const TextStyle(fontSize: 11, color: AppColors.slate500)),
             ],
           ),
@@ -664,7 +766,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                 onPressed: () => context.push('/live/${cls.id}'),
                 icon: const Icon(Icons.videocam, size: 16, color: Colors.white),
                 label: const Text('Enter Room', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.liveRed),
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.liveRed, elevation: 0),
               ),
             ],
           ),
@@ -679,7 +781,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.4)),
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: Column(
@@ -688,16 +790,8 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: AppColors.skyBlueLight, borderRadius: BorderRadius.circular(12)),
-                    child: Text(cls.timeUntilText, style: const TextStyle(color: AppColors.skyBlue, fontWeight: FontWeight.bold, fontSize: 11)),
-                  ),
-                ],
-              ),
-              Text('${cls.formattedDate} • ${cls.formattedTime} IST', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.slate500)),
+              StatusPill(status: ClassStatus.upcoming, customText: cls.timeUntilText),
+              Text('${cls.formattedDate} • ${cls.formattedTime}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.slate500)),
             ],
           ),
           const SizedBox(height: 10),
@@ -716,7 +810,54 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                 onPressed: () => _startOrEnterClass(cls),
                 icon: const Icon(Icons.play_arrow, size: 16, color: Colors.white),
                 label: const Text('Start Class', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue, elevation: 0),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeacherSlotHero(TimetableSlotModel slot) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.4)),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              StatusPill(
+                status: ClassStatus.upcoming,
+                customText: 'TODAY AT ${TimetableSlotModel.formatMinutes(slot.startMin)}',
+              ),
+              Text('${slot.subject ?? 'Subject'} • ${slot.durationString}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.slate500)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(slot.batchName ?? 'Batch', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text('Scheduled: ${TimetableSlotModel.formatMinutes(slot.startMin)} to ${TimetableSlotModel.formatMinutes(slot.endMin)}', style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _startSlotClass(slot),
+                icon: const Icon(Icons.play_arrow, size: 16, color: Colors.white),
+                label: const Text('Start Class', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue, elevation: 0),
               ),
             ],
           ),
@@ -756,121 +897,6 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
     );
   }
 
-  Widget _buildColouredTile({
-    required String title,
-    required Color color,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        height: 88,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 6, offset: const Offset(0, 3))],
-        ),
-        child: Stack(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, height: 1.2)),
-                const Icon(Icons.arrow_forward, color: Colors.white, size: 14),
-              ],
-            ),
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
-                child: Icon(icon, color: Colors.white, size: 20),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickModuleChip({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required String route,
-  }) {
-    return InkWell(
-      onTap: () => context.push(route),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.25)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 6),
-            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildClassCard(LiveClassModel cls) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: cls.isLive ? AppColors.liveRed : AppColors.borderLight),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: cls.isLive ? AppColors.liveRed : AppColors.skyBlueLight,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              cls.isLive ? 'LIVE' : cls.status,
-              style: TextStyle(color: cls.isLive ? Colors.white : AppColors.skyBlue, fontSize: 10, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(cls.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text('${cls.batchName ?? 'Batch'} • ${cls.formattedDate} • ${cls.formattedTime}', style: const TextStyle(fontSize: 11, color: AppColors.slate500)),
-              ],
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => _startOrEnterClass(cls),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: cls.isLive ? AppColors.liveRed : AppColors.skyBlue,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            ),
-            child: Text(cls.isLive ? 'Enter' : 'Start', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _startOrEnterClass(LiveClassModel cls) async {
     if (!cls.isLive) {
       final success = await ref.read(liveClassProvider.notifier).startClass(cls.id);
@@ -879,6 +905,33 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
       }
     } else {
       context.push('/live/${cls.id}');
+    }
+  }
+
+  Future<void> _startSlotClass(TimetableSlotModel slot) async {
+    try {
+      final liveClassState = ref.read(liveClassProvider);
+      final existing = liveClassState.classes.where((c) => c.batchId == slot.batchId && !c.isEnded).firstOrNull;
+      if (existing != null) {
+        await _startOrEnterClass(existing);
+        return;
+      }
+
+      final newCls = await ref.read(liveClassProvider.notifier).createClass(
+            batchId: slot.batchId,
+            title: '${slot.subject ?? 'Live'}: ${slot.batchName ?? 'Class'}',
+            scheduledAt: DateTime.now().toIso8601String(),
+          );
+      await ref.read(liveClassProvider.notifier).startClass(newCls.id);
+      if (mounted) {
+        context.push('/live/${newCls.id}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start slot class: $e')),
+        );
+      }
     }
   }
 
@@ -911,9 +964,9 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: isSelected ? Colors.black87 : Colors.transparent,
+                        color: isSelected ? AppColors.skyBlue : Colors.transparent,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: isSelected ? Colors.black87 : AppColors.borderLight),
+                        border: Border.all(color: isSelected ? AppColors.skyBlue : AppColors.borderLight),
                       ),
                       child: Row(
                         children: [
@@ -948,13 +1001,17 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
             children: [
               Text(
                 '${days[selectedDayIndex]} Schedule (${currentDaySlots.length} slots)',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textLight),
               ),
               ElevatedButton.icon(
                 onPressed: () => _showAddSlot(day: selectedDayIndex),
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add Slot', style: TextStyle(fontSize: 12)),
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
+                icon: const Icon(Icons.add, size: 16, color: Colors.white),
+                label: const Text('Add Slot', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.skyBlue,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             ],
           ),
@@ -963,21 +1020,12 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
         // Slots List
         Expanded(
           child: currentDaySlots.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.alarm_off_outlined, size: 48, color: AppColors.slate400),
-                      const SizedBox(height: 10),
-                      Text('No slots scheduled for ${days[selectedDayIndex]}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: () => _showAddSlot(day: selectedDayIndex),
-                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
-                        child: const Text('Schedule Slot Now'),
-                      ),
-                    ],
-                  ),
+              ? EmptyState(
+                  icon: Icons.alarm_off_outlined,
+                  title: 'No slots scheduled for ${days[selectedDayIndex]}',
+                  subtitle: 'Add weekly recurring slots to broadcast live classes',
+                  buttonText: 'Schedule Slot Now',
+                  onAction: () => _showAddSlot(day: selectedDayIndex),
                 )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
@@ -1002,8 +1050,14 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                             ),
                             child: Column(
                               children: [
-                                Text(TimetableSlotModel.formatMinutes(slot.startMin), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: AppColors.skyBlue)),
-                                Text('to ${TimetableSlotModel.formatMinutes(slot.endMin)}', style: const TextStyle(fontSize: 9, color: AppColors.skyBlue)),
+                                Text(
+                                  TimetableSlotModel.formatMinutes(slot.startMin),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: AppColors.skyBlue),
+                                ),
+                                Text(
+                                  'to ${TimetableSlotModel.formatMinutes(slot.endMin)}',
+                                  style: const TextStyle(fontSize: 9, color: AppColors.skyBlue),
+                                ),
                               ],
                             ),
                           ),
@@ -1012,15 +1066,32 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(slot.batchName ?? 'Batch', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                Text('${slot.subject ?? 'Subject'} • ${slot.durationString}', style: const TextStyle(fontSize: 11, color: AppColors.slate500)),
+                                Text(
+                                  slot.batchName ?? 'Batch',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textLight),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  '${slot.subject ?? 'Subject'} • ${slot.durationString}',
+                                  style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+                                ),
                               ],
                             ),
                           ),
                           IconButton(
                             icon: const Icon(Icons.delete_outline, color: AppColors.liveRed, size: 20),
                             onPressed: () async {
-                              await ref.read(timetableProvider.notifier).deleteSlot(slot.id);
+                              final confirmed = await ConfirmDialog.show(
+                                context,
+                                title: 'Delete Timetable Slot',
+                                message: 'Remove ${slot.batchName} slot from ${days[selectedDayIndex]}?',
+                                confirmText: 'Delete',
+                                isDestructive: true,
+                              );
+                              if (confirmed == true) {
+                                await ref.read(timetableProvider.notifier).deleteSlot(slot.id);
+                              }
                             },
                           ),
                         ],
@@ -1047,12 +1118,19 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Cohort Batches (${batchState.batches.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textLight)),
+              Text(
+                'Cohort Batches (${batchState.batches.length})',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textLight),
+              ),
               ElevatedButton.icon(
                 onPressed: _showCreateBatch,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Create Batch', style: TextStyle(fontSize: 12)),
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
+                icon: const Icon(Icons.add, size: 16, color: Colors.white),
+                label: const Text('Create Batch', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.skyBlue,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             ],
           ),
@@ -1061,21 +1139,12 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
 
         Expanded(
           child: batchState.batches.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.school_outlined, size: 52, color: AppColors.slate400),
-                      const SizedBox(height: 12),
-                      const Text('No batches created yet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textLight)),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: _showCreateBatch,
-                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
-                        child: const Text('Create First Batch'),
-                      ),
-                    ],
-                  ),
+              ? EmptyState(
+                  icon: Icons.school_outlined,
+                  title: 'No batches created yet',
+                  subtitle: 'Create your first cohort to schedule classes and invite students',
+                  buttonText: 'Create First Batch',
+                  onAction: _showCreateBatch,
                 )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
@@ -1096,11 +1165,24 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(b.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textLight)),
+                              Expanded(
+                                child: Text(
+                                  b.name,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textLight),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(color: AppColors.skyBlueLight, borderRadius: BorderRadius.circular(6)),
-                                child: Text('${b.activeStudentsCount} Students', style: const TextStyle(color: AppColors.skyBlue, fontSize: 10, fontWeight: FontWeight.bold)),
+                                decoration: BoxDecoration(
+                                  color: AppColors.skyBlueLight,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${b.activeStudentsCount} Students',
+                                  style: const TextStyle(color: AppColors.skyBlue, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ],
                           ),
@@ -1118,9 +1200,27 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                                 },
                                 icon: const Icon(Icons.copy, size: 14),
                                 label: const Text('Copy Code', style: TextStyle(fontSize: 11)),
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
                               ),
                               const SizedBox(width: 8),
                               ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => BatchDetailScreen(batch: b)),
+                                  );
+                                },
+                                icon: const Icon(Icons.info_outline, size: 14, color: Colors.white),
+                                label: const Text('Batch Details', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.skyBlue,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              OutlinedButton.icon(
                                 onPressed: () {
                                   showDialog(
                                     context: context,
@@ -1129,7 +1229,9 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                                 },
                                 icon: const Icon(Icons.people_outline, size: 14),
                                 label: const Text('Students', style: TextStyle(fontSize: 11)),
-                                style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
                               ),
                             ],
                           ),
@@ -1152,7 +1254,6 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Card
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -1192,7 +1293,6 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Settings Switches
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Class schedule reminders', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textLight)),
@@ -1227,12 +1327,12 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
 
           const SizedBox(height: 24),
 
-          // Action Buttons
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
                   onPressed: () {
+                    Clipboard.setData(const ClipboardData(text: 'Classora Faculty App'));
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Classora Faculty share link copied!')));
                   },
                   style: OutlinedButton.styleFrom(
@@ -1240,7 +1340,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                     side: const BorderSide(color: AppColors.skyBlue),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Share app', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text('Share App', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 14),
@@ -1254,7 +1354,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                     side: const BorderSide(color: AppColors.skyBlue),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Rate us', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text('Rate Us', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -1264,7 +1364,18 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
 
           Center(
             child: TextButton(
-              onPressed: () => ref.read(authStateProvider.notifier).logout(),
+              onPressed: () async {
+                final confirmed = await ConfirmDialog.show(
+                  context,
+                  title: 'Sign Out',
+                  message: 'Are you sure you want to log out of your faculty account?',
+                  confirmText: 'Sign Out',
+                  isDestructive: true,
+                );
+                if (confirmed == true) {
+                  ref.read(authStateProvider.notifier).logout();
+                }
+              },
               child: const Text('Sign Out', style: TextStyle(color: AppColors.liveRed, fontWeight: FontWeight.bold, fontSize: 16)),
             ),
           ),
@@ -1287,8 +1398,8 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
         content: const Text(
           '1. Home: View active live sessions and start teaching.\n'
           '2. Timetable: Add recurring slots. Conflict detection prevents overlapping sessions.\n'
-          '3. Batches: Create batch cohorts and share unique join codes.\n'
-          '4. Live Classroom: Full whiteboard, student audio/video feeds, and interactive chat.',
+          '3. Batches: Create batch cohorts, manage enrolled students, and share unique join codes.\n'
+          '4. Live Classroom: Full whiteboard, student audio/video feeds, and interactive in-class chat.',
           style: TextStyle(fontSize: 13, height: 1.4),
         ),
         actions: [
