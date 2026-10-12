@@ -18,7 +18,7 @@ class AppTheme {
         error: AppColors.liveRed,
         onError: Colors.white,
       ),
-      textTheme: GoogleFonts.plusJakartaSansTextTheme(ThemeData.light().textTheme).apply(
+      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme).apply(
         bodyColor: AppColors.textLight,
         displayColor: AppColors.textLight,
       ),
@@ -113,7 +113,7 @@ class AppTheme {
         error: AppColors.liveRed,
         onError: Colors.white,
       ),
-      textTheme: GoogleFonts.plusJakartaSansTextTheme(ThemeData.dark().textTheme).apply(
+      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme).apply(
         bodyColor: AppColors.textDark,
         displayColor: AppColors.textDark,
       ),

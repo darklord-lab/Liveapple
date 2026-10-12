@@ -19,6 +19,10 @@ import '../../notifications/presentation/widgets/notification_bell_button.dart';
 import '../../learning/presentation/screens/recordings_screen.dart';
 import '../../learning/presentation/screens/assignments_screen.dart';
 import '../../learning/presentation/screens/cbt_tests_screen.dart';
+import '../../../core/widgets/color_tile.dart';
+import '../../../core/widgets/status_pill.dart';
+import '../../../core/widgets/permission_rationale_dialog.dart';
+import '../../../core/widgets/confirm_dialog.dart';
 
 class StudentHomeScreen extends ConsumerStatefulWidget {
   final UserModel user;
@@ -694,7 +698,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
             Row(
               children: [
                 Expanded(
-                  child: _buildColouredTile(
+                  child: ColorTile(
                     title: 'Live\nSchedule',
                     color: AppColors.tileSchedule,
                     icon: Icons.access_time_filled_rounded,
@@ -707,7 +711,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _buildColouredTile(
+                  child: ColorTile(
                     title: 'Study\nMaterial',
                     color: AppColors.tileMaterial,
                     icon: Icons.folder_rounded,
@@ -725,7 +729,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
             Row(
               children: [
                 Expanded(
-                  child: _buildColouredTile(
+                  child: ColorTile(
                     title: 'Recorded\nClasses',
                     color: AppColors.tileRecordings,
                     icon: Icons.videocam_rounded,
@@ -739,7 +743,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _buildColouredTile(
+                  child: ColorTile(
                     title: 'My\nBatches',
                     color: AppColors.tileBatches,
                     icon: Icons.grid_view_rounded,
@@ -845,19 +849,19 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('DPP 03 - Motion in 1D', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text('Homework & CBT Quizzes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                           SizedBox(height: 2),
-                          Text('Assignment • due tomorrow 8 PM', style: TextStyle(color: AppColors.slate500, fontSize: 12)),
+                          Text('Assignments, study tasks & test submissions', style: TextStyle(color: AppColors.slate500, fontSize: 12)),
                         ],
                       ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF97316),
+                        color: AppColors.skyBlueLight,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Text('PENDING', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      child: const Text('VIEW ALL', style: TextStyle(color: AppColors.skyBlue, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -929,22 +933,9 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.liveRed,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.fiber_manual_record, color: Colors.white, size: 8),
-                    SizedBox(width: 4),
-                    Text('LIVE NOW', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10)),
-                  ],
-                ),
-              ),
+              const StatusPill(status: ClassStatus.live),
               Text(
-                '${cls.attendanceCount > 0 ? cls.attendanceCount : 32} joined',
+                '${cls.attendanceCount} joined',
                 style: const TextStyle(fontSize: 11, color: AppColors.slate500),
               ),
             ],
@@ -1086,64 +1077,6 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
     );
   }
 
-  Widget _buildColouredTile({
-    required String title,
-    required Color color,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        height: 88,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.3),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    height: 1.2,
-                  ),
-                ),
-                const Icon(Icons.arrow_forward, color: Colors.white, size: 14),
-              ],
-            ),
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: Colors.white, size: 20),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildNextClassCard(LiveClassModel cls) {
     final subject = cls.subject ?? 'General';
@@ -2015,9 +1948,14 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
 
           _buildSettingsTile(
             title: 'Notification permission',
-            subtitle: 'Allowed • open system settings',
+            subtitle: 'Configure alerts & permissions',
             trailing: const Icon(Icons.chevron_right, color: AppColors.slate400),
-            onTap: () {},
+            onTap: () {
+              PermissionRationaleDialog.show(
+                context,
+                type: PermissionType.notifications,
+              );
+            },
           ),
           const Divider(height: 1, color: AppColors.borderLight),
 
@@ -2072,7 +2010,18 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
           // Sign Out Button
           Center(
             child: TextButton(
-              onPressed: () => ref.read(authStateProvider.notifier).logout(),
+              onPressed: () async {
+                final confirm = await ConfirmDialog.show(
+                  context,
+                  title: 'Sign Out',
+                  message: 'Are you sure you want to sign out from Classora?',
+                  confirmText: 'Sign Out',
+                  isDestructive: true,
+                );
+                if (confirm == true) {
+                  ref.read(authStateProvider.notifier).logout();
+                }
+              },
               child: const Text(
                 'Sign Out',
                 style: TextStyle(color: AppColors.liveRed, fontWeight: FontWeight.bold, fontSize: 16),
