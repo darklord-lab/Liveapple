@@ -85,7 +85,32 @@ export class InviteService {
     });
 
     if (!invite) {
-      throw new AppError('INVALID_INVITE', 'Invite code is invalid', 400);
+      // Check if this is a Batch Join Code (case-insensitive)
+      const code = rawCode.trim();
+      const batch = await prisma.batch.findFirst({
+        where: {
+          OR: [
+            { joinCode: code },
+            { joinCode: code.toUpperCase() },
+          ],
+        },
+        include: { institute: true, teacher: true },
+      });
+
+      if (batch) {
+        return {
+          valid: true,
+          isBatchCode: true,
+          batchId: batch.id,
+          batchName: batch.name,
+          subject: batch.subject,
+          instituteName: batch.institute.name,
+          teacherName: batch.teacher.name,
+          role: 'STUDENT',
+        };
+      }
+
+      throw new AppError('INVALID_INVITE', 'Invite link or batch code is invalid', 400);
     }
 
     if (invite.usedAt !== null) {

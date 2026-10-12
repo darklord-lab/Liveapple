@@ -48,21 +48,27 @@ export class LiveClassService {
     });
 
     const generatedClasses: any[] = [];
-    const today = new Date();
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // 5 hours 30 mins in milliseconds
 
     for (let dayOffset = 0; dayOffset < daysAhead; dayOffset++) {
-      const targetDate = new Date();
-      targetDate.setDate(today.getDate() + dayOffset);
-      const currentDayOfWeek = targetDate.getDay();
+      // Calculate target day in IST
+      const targetIst = new Date(Date.now() + IST_OFFSET_MS + dayOffset * 24 * 60 * 60 * 1000);
+      const istYear = targetIst.getUTCFullYear();
+      const istMonth = targetIst.getUTCMonth();
+      const istDate = targetIst.getUTCDate();
+      const currentDayOfWeek = targetIst.getUTCDay(); // 0 (Sun) to 6 (Sat) in IST
 
       const matchingSlots = slots.filter((s) => s.dayOfWeek === currentDayOfWeek);
 
       for (const slot of matchingSlots) {
-        const scheduledTime = new Date(targetDate);
         const hours = Math.floor(slot.startMin / 60);
         const minutes = slot.startMin % 60;
-        scheduledTime.setHours(hours, minutes, 0, 0);
+        
+        // Exact UTC timestamp for this slot's time in IST
+        const scheduledUtcMs = Date.UTC(istYear, istMonth, istDate, hours, minutes, 0, 0) - IST_OFFSET_MS;
+        const scheduledTime = new Date(scheduledUtcMs);
 
+        // Do not generate if class already ended more than 15 mins ago
         if (scheduledTime.getTime() < Date.now() - 15 * 60 * 1000) {
           continue;
         }

@@ -285,6 +285,7 @@ export class AuthService {
   static async acceptInvite(params: {
     inviteCode: string;
     password: string;
+    email?: string;
     name?: string;
     phone?: string;
     deviceId?: string;
@@ -296,62 +297,132 @@ export class AuthService {
       include: { institute: true },
     });
 
-    if (!invite) {
-      throw new AppError('INVALID_INVITE', 'Invite link or code is invalid', 400);
-    }
+    let user: any;
 
-    if (invite.usedAt !== null) {
-      throw new AppError('INVITE_ALREADY_USED', 'This invite code has already been used', 400);
-    }
+    if (invite) {
+      if (invite.usedAt !== null) {
+        throw new AppError('INVITE_ALREADY_USED', 'This invite code has already been used', 400);
+      }
 
-    if (invite.expiresAt < new Date()) {
-      throw new AppError('INVITE_EXPIRED', 'This invite code has expired (48-hour limit)', 400);
-    }
+      if (invite.expiresAt < new Date()) {
+        throw new AppError('INVITE_EXPIRED', 'This invite code has expired (48-hour limit)', 400);
+      }
 
-    const email = invite.email?.toLowerCase().trim();
-    if (!email) {
-      throw new AppError('BAD_REQUEST', 'Invite does not have an associated email', 400);
-    }
+      const email = invite.email?.toLowerCase().trim();
+      if (!email) {
+        throw new AppError('BAD_REQUEST', 'Invite does not have an associated email', 400);
+      }
 
-    // Check if user already exists in this institute
-    const existingUser = await prisma.user.findFirst({
-      where: { instituteId: invite.instituteId, email },
-    });
+      // Check if user already exists in this institute
+      const existingUser = await prisma.user.findFirst({
+        where: { instituteId: invite.instituteId, email },
+      });
 
-    const passwordHash = await hashPassword(params.password);
-    let user;
+      const passwordHash = await hashPassword(params.password);
 
-    if (existingUser) {
-      user = await prisma.user.update({
-        where: { id: existingUser.id },
-        data: {
-          passwordHash,
-          name: params.name?.trim() || existingUser.name,
-          phone: params.phone?.trim() || existingUser.phone,
-          status: 'ACTIVE',
-        },
-        include: { institute: true },
+      if (existingUser) {
+        user = await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            passwordHash,
+            name: params.name?.trim() || existingUser.name,
+            phone: params.phone?.trim() || existingUser.phone,
+            status: 'ACTIVE',
+          },
+          include: { institute: true },
+        });
+      } else {
+        user = await prisma.user.create({
+          data: {
+            instituteId: invite.instituteId,
+            email,
+            role: invite.role,
+            name: params.name?.trim() || email.split('@')[0],
+            phone: params.phone?.trim() || invite.phone,
+            passwordHash,
+            status: 'ACTIVE',
+          },
+          include: { institute: true },
+        });
+      }
+
+      // Mark invite as used
+      await prisma.invite.update({
+        where: { id: invite.id },
+        data: { usedAt: new Date() },
       });
     } else {
-      user = await prisma.user.create({
-        data: {
-          instituteId: invite.instituteId,
-          email,
-          role: invite.role,
-          name: params.name?.trim() || email.split('@')[0],
-          phone: params.phone?.trim() || invite.phone,
-          passwordHash,
-          status: 'ACTIVE',
+      // Check if this is a Batch Join Code (case-insensitive)
+      const code = params.inviteCode.trim();
+      const batch = await prisma.batch.findFirst({
+        where: {
+          OR: [
+            { joinCode: code },
+            { joinCode: code.toUpperCase() },
+          ],
         },
-        include: { institute: true },
+        include: { institute: true, teacher: true },
       });
-    }
 
-    // Mark invite as used
-    await prisma.invite.update({
-      where: { id: invite.id },
-      data: { usedAt: new Date() },
-    });
+      if (!batch) {
+        throw new AppError('INVALID_INVITE', 'Invite link or batch code is invalid', 400);
+      }
+
+      // Determine student email
+      const studentEmail = (
+        params.email?.toLowerCase().trim() ||
+        (params.phone?.trim() ? `student_${params.phone.trim().replace(/\D/g, '')}@student.classora.edu` : `student_${Date.now().toString(36)}@student.classora.edu`)
+      );
+
+      const existingUser = await prisma.user.findFirst({
+        where: { instituteId: batch.instituteId, email: studentEmail },
+      });
+
+      const passwordHash = await hashPassword(params.password);
+
+      if (existingUser) {
+        user = await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            passwordHash,
+            name: params.name?.trim() || existingUser.name,
+            phone: params.phone?.trim() || existingUser.phone,
+            status: 'ACTIVE',
+          },
+          include: { institute: true },
+        });
+      } else {
+        user = await prisma.user.create({
+          data: {
+            instituteId: batch.instituteId,
+            email: studentEmail,
+            role: 'STUDENT',
+            name: params.name?.trim() || studentEmail.split('@')[0],
+            phone: params.phone?.trim(),
+            passwordHash,
+            status: 'ACTIVE',
+            creatorTeacherId: batch.teacherId,
+          },
+          include: { institute: true },
+        });
+      }
+
+      // Auto-enroll in the batch if not already enrolled
+      const existingEnrollment = await prisma.enrollment.findFirst({
+        where: { batchId: batch.id, studentId: user.id },
+      });
+
+      if (!existingEnrollment) {
+        await prisma.enrollment.create({
+          data: {
+            instituteId: batch.instituteId,
+            batchId: batch.id,
+            studentId: user.id,
+            status: 'ACTIVE',
+          },
+        });
+      }
+    }
 
     // 1. Generate Access Token
     const tokenPayload: TokenUserPayload = {
@@ -384,7 +455,7 @@ export class AuthService {
       actorId: user.id,
       action: 'INVITE_ACCEPTED',
       entity: 'AUTH',
-      meta: { inviteId: invite.id, role: invite.role },
+      meta: invite ? { inviteId: invite.id, role: invite.role } : { code: params.inviteCode.trim(), role: 'STUDENT' },
     });
 
     return {

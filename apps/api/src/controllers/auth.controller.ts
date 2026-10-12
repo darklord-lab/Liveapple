@@ -18,6 +18,7 @@ const refreshSchema = z.object({
 const acceptInviteSchema = z.object({
   inviteCode: z.string().min(1, 'Invite code is required'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  email: z.string().email().optional(),
   name: z.string().min(2, 'Name must be at least 2 characters').optional(),
   phone: z.string().optional(),
   deviceId: z.string().optional(),

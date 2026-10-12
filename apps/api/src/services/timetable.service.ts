@@ -1,6 +1,7 @@
 import { prisma } from '../utils/prisma.js';
 import { AppError } from '../errors/AppError.js';
 import { logAudit } from './audit.service.js';
+import { LiveClassService } from './liveclass.service.js';
 
 export interface CreateSlotInput {
   batchId: string;
@@ -176,6 +177,13 @@ export class TimetableService {
       entity: `TimetableSlot:${newSlot.id}`,
       meta: { batchId, dayOfWeek, startMin, endMin },
     });
+
+    // Auto-generate upcoming live classes immediately so dashboard and notifications sync in real-time
+    try {
+      await LiveClassService.generateUpcomingFromSlots(instituteId, teacherId, 7);
+    } catch (err) {
+      console.warn('[TimetableService] Non-fatal: auto-generating upcoming live classes failed:', err);
+    }
 
     return newSlot;
   }
