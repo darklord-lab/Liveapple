@@ -4,6 +4,7 @@ import { AppError } from '../errors/AppError.js';
 
 export interface TokenUserPayload {
   userId: string;
+  id?: string;
   instituteId: string;
   role: 'ADMIN' | 'TEACHER' | 'STUDENT';
   email: string;
@@ -19,6 +20,7 @@ export interface DecodedAccessToken extends TokenUserPayload {
  * Signs a 15-minute Access JWT
  */
 export function signAccessToken(payload: TokenUserPayload): string {
+  payload.id = payload.userId;
   const options: SignOptions = {
     expiresIn: env.JWT_ACCESS_EXPIRES_IN as any,
   };

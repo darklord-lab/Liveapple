@@ -312,16 +312,22 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
   /* -------------------------------------------------------------------------- */
   Widget _buildHomeTab() {
     final liveClassState = ref.watch(liveClassProvider);
+    final timetableState = ref.watch(timetableProvider);
     final activeLiveClass = liveClassState.classes.cast<LiveClassModel?>().firstWhere(
           (c) => c != null && c.isLive,
           orElse: () => null,
         );
     final upcoming = liveClassState.classes.where((c) => !c.isEnded).toList();
 
+    // Map today's timetable slots (dayOfWeek: 0 = Sun, 1 = Mon, 2 = Tue, ..., 6 = Sat)
+    final todayWeekday = DateTime.now().weekday % 7;
+    final todaySlots = timetableState.slots.where((s) => s.dayOfWeek == todayWeekday).toList();
+
     return RefreshIndicator(
       onRefresh: () async {
         await ref.read(liveClassProvider.notifier).loadClasses();
         await ref.read(batchListProvider.notifier).loadBatches();
+        await ref.read(timetableProvider.notifier).loadSlots();
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -334,6 +340,8 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
               _buildTeacherLiveHero(activeLiveClass)
             else if (upcoming.isNotEmpty)
               _buildTeacherUpcomingHero(upcoming.first)
+            else if (todaySlots.isNotEmpty)
+              _buildTeacherSlotHero(todaySlots.first)
             else
               _buildTeacherDefaultHero(),
 
@@ -355,6 +363,8 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                     onTap: () {
                       if (upcoming.isNotEmpty) {
                         _startOrEnterClass(upcoming.first);
+                      } else if (todaySlots.isNotEmpty) {
+                        _startSlotClass(todaySlots.first);
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Please schedule a class from Timetable or Batches first')),
@@ -399,7 +409,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
 
             const SizedBox(height: 22),
 
-            // 3. Learning Hub Quick Chips
+            // 3. Learning Hub Quick Chips (Removed CBT Quizzes as requested, renamed to Study Material & Notes)
             const Text(
               'Faculty Modules',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textLight),
@@ -409,9 +419,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildQuickModuleChip(icon: Icons.edit_note, label: 'Assignments', color: Colors.purple, route: '/assignments'),
-                  const SizedBox(width: 8),
-                  _buildQuickModuleChip(icon: Icons.quiz_outlined, label: 'CBT Quizzes', color: Colors.teal, route: '/tests'),
+                  _buildQuickModuleChip(icon: Icons.menu_book_rounded, label: 'Study Material & Notes', color: Colors.purple, route: '/assignments'),
                   const SizedBox(width: 8),
                   _buildQuickModuleChip(icon: Icons.videocam_outlined, label: 'Recordings', color: AppColors.skyBlue, route: '/recordings'),
                   const SizedBox(width: 8),
@@ -447,7 +455,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
 
             if (liveClassState.isLoading)
               const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
-            else if (upcoming.isEmpty && !_showPastClasses)
+            else if (upcoming.isEmpty && todaySlots.isEmpty && !_showPastClasses)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -458,19 +466,157 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                 ),
                 child: const Center(
                   child: Text(
-                    'No pending classes. Use Timetable tab to add slots.',
+                    'No pending classes for today. Use Timetable tab to add slots.',
                     style: TextStyle(color: AppColors.slate500, fontSize: 13),
                   ),
                 ),
               )
-            else
-              ...(_showPastClasses ? liveClassState.classes : upcoming).map((cls) => _buildClassCard(cls)),
+            else ...[
+              if (_showPastClasses)
+                ...liveClassState.classes.map((cls) => _buildClassCard(cls))
+              else ...[
+                // Active or Upcoming Classes
+                ...upcoming.map((cls) => _buildClassCard(cls)),
+                // Today's Timetable slots not yet started as LiveClass
+                ...todaySlots
+                    .where((slot) => !upcoming.any((cls) => cls.batchId == slot.batchId))
+                    .map((slot) => _buildSlotCard(slot)),
+              ],
+            ],
 
             const SizedBox(height: 20),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildSlotCard(TimetableSlotModel slot) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.skyBlueLight,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              '${TimetableSlotModel.formatMinutes(slot.startMin)} - ${TimetableSlotModel.formatMinutes(slot.endMin)}',
+              style: const TextStyle(color: AppColors.skyBlue, fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  slot.batchName ?? 'Batch',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '${slot.subject ?? 'Subject'} • Today (${slot.durationString})',
+                  style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => _startSlotClass(slot),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.skyBlue,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            ),
+            child: const Text('Start', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeacherSlotHero(TimetableSlotModel slot) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.3)),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(color: AppColors.skyBlueLight, borderRadius: BorderRadius.circular(12)),
+                child: Text('TODAY AT ${TimetableSlotModel.formatMinutes(slot.startMin)}', style: const TextStyle(color: AppColors.skyBlue, fontWeight: FontWeight.bold, fontSize: 11)),
+              ),
+              Text('${slot.subject ?? 'Subject'} • ${slot.durationString}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.slate500)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(slot.batchName ?? 'Batch', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text('Scheduled slot: ${TimetableSlotModel.formatMinutes(slot.startMin)} to ${TimetableSlotModel.formatMinutes(slot.endMin)}', style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _startSlotClass(slot),
+                icon: const Icon(Icons.play_arrow, size: 16, color: Colors.white),
+                label: const Text('Start Class', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startSlotClass(TimetableSlotModel slot) async {
+    try {
+      final liveClassState = ref.read(liveClassProvider);
+      final existing = liveClassState.classes.where((c) => c.batchId == slot.batchId && !c.isEnded).firstOrNull;
+      if (existing != null) {
+        await _startOrEnterClass(existing);
+        return;
+      }
+
+      final newCls = await ref.read(liveClassProvider.notifier).createClass(
+        batchId: slot.batchId,
+        title: '${slot.subject ?? 'Live'}: ${slot.batchName ?? 'Class'}',
+        scheduledAt: DateTime.now().toIso8601String(),
+      );
+      await ref.read(liveClassProvider.notifier).startClass(newCls.id);
+      if (mounted) {
+        context.push('/live/${newCls.id}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start slot class: $e')),
+        );
+      }
+    }
   }
 
   Widget _buildTeacherLiveHero(LiveClassModel cls) {

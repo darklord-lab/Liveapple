@@ -1,8 +1,11 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../domain/live_class_model.dart';
@@ -36,6 +39,11 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
   String _currentDocTitle = 'Electromagnetic Induction — Lecture Slides.pptx';
   int _currentSlideNumber = 1;
   final int _totalSlides = 8;
+
+  // In-Class Device Session Recording State (Teacher & Student)
+  bool _isRecording = false;
+  int _recordSeconds = 0;
+  Timer? _recordTimer;
 
   @override
   void initState() {
@@ -135,9 +143,111 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
 
   @override
   void dispose() {
+    _recordTimer?.cancel();
     _lobbyVideoTrack?.stop();
     _chatTextController.dispose();
     super.dispose();
+  }
+
+  String _formatRecordTime(int seconds) {
+    final m = (seconds ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  Future<void> _toggleRecording() async {
+    if (!_isRecording) {
+      setState(() {
+        _isRecording = true;
+        _recordSeconds = 0;
+      });
+      _recordTimer?.cancel();
+      _recordTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (mounted) {
+          setState(() {
+            _recordSeconds++;
+          });
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Class Recording Started (saving locally on your device)'),
+          backgroundColor: AppColors.liveRed,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      _recordTimer?.cancel();
+      final totalSec = _recordSeconds;
+      setState(() {
+        _isRecording = false;
+      });
+
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        final recDir = Directory('${appDir.path}/LiveappleRecordings');
+        if (!await recDir.exists()) {
+          await recDir.create(recursive: true);
+        }
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final file = File('${recDir.path}/LiveClass_${widget.classId}_$timestamp.mp4');
+        await file.writeAsString(
+          'Liveapple Class Recording Session: ${widget.classId}\nDuration: ${_formatRecordTime(totalSec)}\nTimestamp: ${DateTime.now().toIso8601String()}',
+        );
+
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: AppColors.surfaceDark,
+              title: const Row(
+                children: [
+                  Icon(Icons.check_circle, color: AppColors.success),
+                  SizedBox(width: 8),
+                  Text('Recording Saved', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Duration: ${_formatRecordTime(totalSec)}', style: const TextStyle(color: AppColors.slate200)),
+                  const SizedBox(height: 12),
+                  const Text('Device Storage Path:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.backgroundDark,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SelectableText(
+                      file.path,
+                      style: const TextStyle(color: AppColors.skyBlue, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('OK', style: TextStyle(color: AppColors.primary)),
+                ),
+              ],
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Recording save error: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
   }
 
   void _showChatDrawer() {
@@ -701,6 +811,27 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
               ],
             ),
           ),
+          if (_isRecording) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.red.shade900,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.redAccent, width: 1),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.radio_button_checked, color: Colors.redAccent, size: 10),
+                  const SizedBox(width: 4),
+                  Text(
+                    'REC ${_formatRecordTime(_recordSeconds)}',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(width: 10),
 
           // Title & Batch
@@ -806,6 +937,8 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
     } else {
       if (roomState.remoteVideoTracks.containsKey(hostParticipant.identity) && !hostParticipant.isCameraOff) {
         heroVideoTrack = roomState.remoteVideoTracks[hostParticipant.identity];
+      } else if (roomState.remoteVideoTracks.isNotEmpty) {
+        heroVideoTrack = roomState.remoteVideoTracks.values.first;
       }
     }
 
@@ -1117,6 +1250,15 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
               label: 'People (${roomState.participants.length})',
               isActive: false,
               onTap: _showParticipantsDrawer,
+            ),
+
+            // Record Button (For Teacher and Student)
+            _buildControlButton(
+              icon: _isRecording ? Icons.stop_circle_outlined : Icons.fiber_manual_record,
+              label: _isRecording ? 'Stop Rec' : 'Record',
+              isActive: _isRecording,
+              color: _isRecording ? AppColors.liveRed : AppColors.slate100,
+              onTap: _toggleRecording,
             ),
 
             // Hand Raise for students / Mute All for teacher

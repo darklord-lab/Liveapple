@@ -11,6 +11,8 @@ services:
         value: production
       - key: DATABASE_URL
         value: file:./dev.db
+      - key: FORCE_DEMO_RESET
+        value: "true"
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET

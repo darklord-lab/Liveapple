@@ -71,9 +71,10 @@ export class LiveClassController {
       if (!req.user) throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
 
       const parsed = generateUpcomingSchema.parse(req.body || {});
+      const teacherId = req.user.id || req.user.userId;
       const result = await LiveClassService.generateUpcomingFromSlots(
         req.user.instituteId,
-        req.user.id,
+        teacherId,
         parsed.daysAhead || 7
       );
 

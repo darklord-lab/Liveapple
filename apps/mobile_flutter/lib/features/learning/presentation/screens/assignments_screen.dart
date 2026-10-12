@@ -21,12 +21,12 @@ class AssignmentsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Assignments & Study Materials', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Study Material & Notes', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           if (canCreate)
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
-              tooltip: 'Upload / Create Assignment or Notes',
+              tooltip: 'Upload Study Material or Notes',
               onPressed: () => _showCreateAssignmentDialog(context, ref),
             ),
           IconButton(
@@ -39,7 +39,7 @@ class AssignmentsScreen extends ConsumerWidget {
           ? FloatingActionButton.extended(
               backgroundColor: AppColors.skyBlue,
               icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('Upload Notes / Assignment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              label: const Text('Upload Notes / Material', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               onPressed: () => _showCreateAssignmentDialog(context, ref),
             )
           : null,
@@ -51,7 +51,7 @@ class AssignmentsScreen extends ConsumerWidget {
             children: [
               const Icon(Icons.error_outline, color: AppColors.liveRed, size: 40),
               const SizedBox(height: 12),
-              Text('Error loading assignments: $err', style: const TextStyle(color: Colors.white70)),
+              Text('Error loading materials: $err', style: const TextStyle(color: Colors.white70)),
             ],
           ),
         ),
@@ -68,16 +68,16 @@ class AssignmentsScreen extends ConsumerWidget {
                       color: AppColors.surfaceLight.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Icon(Icons.assignment_outlined, color: AppColors.slate400, size: 36),
+                    child: const Icon(Icons.menu_book_rounded, color: AppColors.slate400, size: 36),
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'No assignments yet',
+                    'No study material or notes yet',
                     style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Active coursework and homework will appear here.',
+                    'Faculty notes, handouts, and assignments will appear here.',
                     style: TextStyle(color: AppColors.slate400, fontSize: 13),
                   ),
                 ],
@@ -102,75 +102,267 @@ class AssignmentsScreen extends ConsumerWidget {
   Widget _buildAssignmentCard(BuildContext context, WidgetRef ref, AssignmentModel item) {
     final dueStr = DateFormat('dd MMM, hh:mm a').format(item.dueDate);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: item.isGraded
-              ? const Color(0xFF10B981).withValues(alpha: 0.5)
-              : item.isSubmitted
-                  ? const Color(0xFF38BDF8).withValues(alpha: 0.5)
-                  : const Color(0xFF334155),
-          width: 1.2,
+    return InkWell(
+      onTap: () => _showAssignmentDetailModal(context, ref, item),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: item.isGraded
+                ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                : item.isSubmitted
+                    ? const Color(0xFF38BDF8).withValues(alpha: 0.5)
+                    : const Color(0xFF334155),
+            width: 1.2,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                if (item.batchName != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      item.subject ?? item.batchName!,
+                      style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Text('Max Marks: ${item.maxMarks}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                const Spacer(),
+                _buildStatusBadge(item),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              item.title,
+              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              item.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+            ),
+            if (item.attachmentUrl != null && item.attachmentUrl!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.attach_file, size: 14, color: AppColors.skyBlue),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      item.attachmentUrl!.split('/').last,
+                      style: const TextStyle(color: AppColors.skyBlue, fontSize: 12, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.event_outlined, size: 14, color: Color(0xFFF59E0B)),
+                const SizedBox(width: 4),
+                Text('Due: $dueStr', style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 12, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                const Text(
+                  'Tap to view details →',
+                  style: TextStyle(color: AppColors.skyBlue, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    );
+  }
+
+  void _showAssignmentDetailModal(BuildContext context, WidgetRef ref, AssignmentModel item) {
+    final dueStr = DateFormat('dd MMM yyyy, hh:mm a').format(item.dueDate);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (ctx, scrollController) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: ListView(
+            controller: scrollController,
             children: [
-              if (item.batchName != null) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    item.subject ?? item.batchName!,
-                    style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(width: 8),
+              ),
+              const SizedBox(height: 16),
+
+              // Subject / Batch Tag & Status
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (item.batchName != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${item.subject ?? 'Subject'} • ${item.batchName!}',
+                        style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  _buildStatusBadge(item),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Title
+              Text(
+                item.title,
+                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+
+              // Due Date Banner
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF334155)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today, size: 16, color: Color(0xFFF59E0B)),
+                    const SizedBox(width: 8),
+                    Text('Due Date: $dueStr', style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                    const Spacer(),
+                    Text('Max Marks: ${item.maxMarks}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Description / Study Notes Content
+              const Text(
+                'Notes & Guidelines:',
+                style: TextStyle(color: AppColors.slate400, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF334155)),
+                ),
+                child: SelectableText(
+                  item.description.isNotEmpty ? item.description : 'No additional description provided.',
+                  style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Attached Material
+              if (item.attachmentUrl != null && item.attachmentUrl!.isNotEmpty) ...[
+                const Text(
+                  'Attached Study File / Document:',
+                  style: TextStyle(color: AppColors.slate400, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.attachmentUrl!.split('/').last,
+                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const Text('Attached Document', style: TextStyle(color: AppColors.slate400, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.skyBlue,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        icon: const Icon(Icons.open_in_new, size: 14),
+                        label: const Text('Open / View', style: TextStyle(fontSize: 12)),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Viewing document: ${item.attachmentUrl}'),
+                              backgroundColor: AppColors.skyBlue,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
               ],
-              Text('Max Marks: ${item.maxMarks}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-              const Spacer(),
-              _buildStatusBadge(item),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            item.title,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            item.description,
-            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.event_outlined, size: 14, color: Color(0xFFF59E0B)),
-              const SizedBox(width: 4),
-              Text('Due: $dueStr', style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 12, fontWeight: FontWeight.w600)),
-              const Spacer(),
-              if (!isTeacher && !item.isSubmitted)
-                ElevatedButton.icon(
-                  onPressed: () => _showSubmitDialog(context, ref, item.id),
-                  icon: const Icon(Icons.upload_file, size: 14),
-                  label: const Text('Submit Work', style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF38BDF8),
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+
+              // Actions
+              if (!isTeacher && !item.isSubmitted) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.skyBlue),
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Submit Assignment Work', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _showSubmitDialog(context, ref, item.id);
+                    },
                   ),
                 ),
+              ],
             ],
           ),
-        ],
+        ),
       ),
     );
   }

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/auth_controller.dart';
 import '../../../batch/presentation/batch_controller.dart';
@@ -104,79 +108,96 @@ class RecordingsScreen extends ConsumerWidget {
   Widget _buildRecordingCard(BuildContext context, RecordingModel item) {
     final dateStr = DateFormat('dd MMM yyyy, hh:mm a').format(item.createdAt);
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF334155), width: 1),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Thumbnail Preview Box
-          Container(
-            width: 70,
-            height: 70,
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+    return InkWell(
+      onTap: () => _openSecurePlayer(context, item),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF334155), width: 1),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Thumbnail Preview Box
+            Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+              ),
+              child: const Center(
+                child: Icon(Icons.play_circle_fill, color: Color(0xFF38BDF8), size: 36),
+              ),
             ),
-            child: const Center(
-              child: Icon(Icons.play_circle_fill, color: Color(0xFF38BDF8), size: 32),
-            ),
-          ),
-          const SizedBox(width: 14),
+            const SizedBox(width: 14),
 
-          // Details
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (item.batchName != null) ...[
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
+            // Details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (item.batchName != null) ...[
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            item.subject ?? item.batchName!,
+                            style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
                         ),
-                        child: Text(
-                          item.subject ?? item.batchName!,
-                          style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
+                        const SizedBox(width: 6),
+                        Text(
+                          '• ${item.batchName!}',
+                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '• ${item.batchName!}',
-                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
-                      ),
-                    ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                  Text(
+                    item.title,
+                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.timer_outlined, size: 13, color: Color(0xFF94A3B8)),
+                      const SizedBox(width: 4),
+                      Text(item.durationFormatted, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                      const SizedBox(width: 12),
+                      const Icon(Icons.calendar_today_outlined, size: 13, color: Color(0xFF94A3B8)),
+                      const SizedBox(width: 4),
+                      Text(dateStr, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                      const Spacer(),
+                      const Icon(Icons.lock_outline, size: 13, color: Colors.greenAccent),
+                      const SizedBox(width: 3),
+                      const Text('Protected', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
                 ],
-                Text(
-                  item.title,
-                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.timer_outlined, size: 13, color: Color(0xFF94A3B8)),
-                    const SizedBox(width: 4),
-                    Text(item.durationFormatted, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                    const SizedBox(width: 12),
-                    const Icon(Icons.calendar_today_outlined, size: 13, color: Color(0xFF94A3B8)),
-                    const SizedBox(width: 4),
-                    Text(dateStr, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openSecurePlayer(BuildContext context, RecordingModel item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SecurePlayerScreen(recording: item),
       ),
     );
   }
@@ -193,15 +214,16 @@ class RecordingsScreen extends ConsumerWidget {
 
     String selectedBatchId = batches.first.id;
     final titleController = TextEditingController();
-    final urlController = TextEditingController(text: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
+    final urlController = TextEditingController();
     final durationController = TextEditingController(text: '45');
+    String? pickedVideoFileName;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF1E293B),
-          title: const Text('Upload / Add Class Recording', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          title: const Text('Upload Class Recording', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -236,15 +258,76 @@ class RecordingsScreen extends ConsumerWidget {
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                 ),
+                const SizedBox(height: 14),
+
+                // Device Video File Picker
+                const Text('Choose Video From Device Storage', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
+                const SizedBox(height: 6),
+                InkWell(
+                  onTap: () async {
+                    try {
+                      final result = await FilePicker.platform.pickFiles(
+                        type: FileType.video,
+                      );
+                      if (result != null && result.files.isNotEmpty) {
+                        setDialogState(() {
+                          pickedVideoFileName = result.files.first.name;
+                          urlController.text = result.files.first.path ?? result.files.first.name;
+                          if (titleController.text.trim().isEmpty) {
+                            titleController.text = result.files.first.name.split('.').first;
+                          }
+                        });
+                      }
+                    } catch (_) {}
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: pickedVideoFileName != null ? Colors.greenAccent : AppColors.skyBlue),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(pickedVideoFileName != null ? Icons.check_circle : Icons.video_file, color: pickedVideoFileName != null ? Colors.greenAccent : AppColors.skyBlue, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            pickedVideoFileName ?? 'Select Video File (MP4, MKV, WebM)',
+                            style: TextStyle(
+                              color: pickedVideoFileName != null ? Colors.white : AppColors.slate400,
+                              fontSize: 12,
+                              fontWeight: pickedVideoFileName != null ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 12),
 
-                const Text('Video Stream URL (MP4 / WebM / Cloud Link)', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
+                const Row(
+                  children: [
+                    Expanded(child: Divider(color: Color(0xFF334155))),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Text('OR UNLISTED VIDEO LINK', style: TextStyle(color: AppColors.slate500, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                    Expanded(child: Divider(color: Color(0xFF334155))),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                const Text('YouTube Unlisted / Direct MP4 Video URL', style: TextStyle(color: AppColors.slate400, fontSize: 12)),
                 const SizedBox(height: 4),
                 TextField(
                   controller: urlController,
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
-                    hintText: 'https://...',
+                    hintText: 'https://youtu.be/... or https://...mp4',
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                 ),
@@ -273,7 +356,7 @@ class RecordingsScreen extends ConsumerWidget {
               onPressed: () async {
                 if (titleController.text.trim().isEmpty || urlController.text.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter both title and video URL')),
+                    const SnackBar(content: Text('Please provide lecture title and select a video file or link')),
                   );
                   return;
                 }
@@ -291,7 +374,7 @@ class RecordingsScreen extends ConsumerWidget {
                   if (ctx.mounted) Navigator.pop(ctx);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Class recording published to batch students!'), backgroundColor: AppColors.success),
+                      const SnackBar(content: Text('Lecture recording published to batch students!'), backgroundColor: AppColors.success),
                     );
                   }
                 } catch (e) {
@@ -303,6 +386,423 @@ class RecordingsScreen extends ConsumerWidget {
                 }
               },
               child: const Text('Upload Recording'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dedicated Secure In-App Video Player Screen
+/// Strict Security Rules (Per User Spec):
+/// 1. NO share button
+/// 2. NO download button
+/// 3. Only Play / Pause
+/// 4. Playback Speed Selector (0.75x, 1x, 1.25x, 1.5x, 2x)
+/// 5. Portrait & Landscape Orientation Toggle
+class SecurePlayerScreen extends StatefulWidget {
+  final RecordingModel recording;
+
+  const SecurePlayerScreen({super.key, required this.recording});
+
+  @override
+  State<SecurePlayerScreen> createState() => _SecurePlayerScreenState();
+}
+
+class _SecurePlayerScreenState extends State<SecurePlayerScreen> {
+  VideoPlayerController? _videoController;
+  WebViewController? _webController;
+  bool _isYouTube = false;
+  bool _isLoading = true;
+  bool _isPlaying = false;
+  bool _isLandscape = false;
+  double _playbackSpeed = 1.0;
+  Duration _currentPosition = Duration.zero;
+  Duration _totalDuration = Duration.zero;
+
+  final List<double> _speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
+
+  @override
+  void initState() {
+    super.initState();
+    _initPlayer();
+  }
+
+  void _initPlayer() {
+    final url = widget.recording.videoUrl.trim();
+    if (url.contains('youtube.com') || url.contains('youtu.be')) {
+      _isYouTube = true;
+      _initYouTube(url);
+    } else {
+      _isYouTube = false;
+      _initDirectVideo(url);
+    }
+  }
+
+  String? _extractYouTubeId(String url) {
+    if (url.contains('youtu.be/')) {
+      return url.split('youtu.be/').last.split('?').first.split('&').first;
+    }
+    if (url.contains('watch?v=')) {
+      return url.split('watch?v=').last.split('&').first;
+    }
+    if (url.contains('embed/')) {
+      return url.split('embed/').last.split('?').first;
+    }
+    return null;
+  }
+
+  void _initYouTube(String url) {
+    final videoId = _extractYouTubeId(url) ?? 'M7lc1UVf-VE';
+    
+    // Sandboxed embed HTML with modestbranding, no related videos, no sharing, no annotations
+    final htmlContent = '''
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <style>
+          body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+          #player { width: 100%; height: 100%; }
+        </style>
+      </head>
+      <body>
+        <div id="player"></div>
+        <script>
+          var tag = document.createElement('script');
+          tag.src = "https://www.youtube.com/iframe_api";
+          var firstScriptTag = document.getElementsByTagName('script')[0];
+          firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+          var player;
+          function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+              videoId: '$videoId',
+              playerVars: {
+                'autoplay': 1,
+                'controls': 0,
+                'modestbranding': 1,
+                'rel': 0,
+                'disablekb': 1,
+                'fs': 0,
+                'iv_load_policy': 3
+              },
+              events: {
+                'onReady': onPlayerReady,
+                'onStateChange': onPlayerStateChange
+              }
+            });
+          }
+          function onPlayerReady(event) {
+            event.target.playVideo();
+          }
+          function onPlayerStateChange(event) {
+            // State tracking
+          }
+          function play() { player.playVideo(); }
+          function pause() { player.pauseVideo(); }
+          function setSpeed(rate) { player.setPlaybackRate(rate); }
+        </script>
+      </body>
+    </html>
+    ''';
+
+    _webController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (request) {
+            // Block all external navigations (no sharing/links)
+            if (request.url.startsWith('https://www.youtube.com/watch') || request.url.contains('share')) {
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
+          onPageFinished: (_) {
+            if (mounted) setState(() => _isLoading = false);
+          },
+        ),
+      )
+      ..loadHtmlString(htmlContent);
+
+    setState(() {
+      _isPlaying = true;
+      _totalDuration = Duration(seconds: widget.recording.durationSec > 0 ? widget.recording.durationSec : 2700);
+    });
+  }
+
+  void _initDirectVideo(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      _videoController = VideoPlayerController.networkUrl(uri);
+      await _videoController!.initialize();
+      _videoController!.addListener(() {
+        if (mounted && _videoController != null) {
+          setState(() {
+            _currentPosition = _videoController!.value.position;
+            _totalDuration = _videoController!.value.duration;
+            _isPlaying = _videoController!.value.isPlaying;
+          });
+        }
+      });
+      await _videoController!.play();
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isPlaying = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _togglePlayPause() {
+    if (_isYouTube) {
+      setState(() => _isPlaying = !_isPlaying);
+      if (_isPlaying) {
+        _webController?.runJavaScript('play();');
+      } else {
+        _webController?.runJavaScript('pause();');
+      }
+    } else {
+      if (_videoController != null) {
+        if (_videoController!.value.isPlaying) {
+          _videoController!.pause();
+        } else {
+          _videoController!.play();
+        }
+      }
+    }
+  }
+
+  void _setSpeed(double speed) {
+    setState(() => _playbackSpeed = speed);
+    if (_isYouTube) {
+      _webController?.runJavaScript('setSpeed($speed);');
+    } else {
+      _videoController?.setPlaybackSpeed(speed);
+    }
+  }
+
+  void _toggleOrientation() {
+    setState(() => _isLandscape = !_isLandscape);
+    if (_isLandscape) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
+    }
+  }
+
+  @override
+  void dispose() {
+    // Always restore portrait mode upon exit
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+    _videoController?.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    if (d.inHours > 0) {
+      return '${d.inHours}:$minutes:$seconds';
+    }
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top Secure Header Bar (NO SHARE, NO DOWNLOAD)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              color: const Color(0xFF0F172A),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.recording.title,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '${widget.recording.batchName ?? 'Batch'} • Protected Lecture Stream',
+                          style: const TextStyle(color: AppColors.slate400, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Protected badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.greenAccent, width: 0.6),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.shield_outlined, size: 12, color: Colors.greenAccent),
+                        SizedBox(width: 4),
+                        Text('Protected', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Video Player Stage
+            Expanded(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (_isYouTube && _webController != null)
+                    WebViewWidget(controller: _webController!)
+                  else if (_videoController != null && _videoController!.value.isInitialized)
+                    Center(
+                      child: AspectRatio(
+                        aspectRatio: _videoController!.value.aspectRatio,
+                        child: VideoPlayer(_videoController!),
+                      ),
+                    )
+                  else if (_isLoading)
+                    const Center(
+                      child: CircularProgressIndicator(color: AppColors.skyBlue),
+                    )
+                  else
+                    const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.videocam_off, color: AppColors.slate400, size: 48),
+                          SizedBox(height: 10),
+                          Text('Video Stream Ready', style: TextStyle(color: Colors.white70)),
+                        ],
+                      ),
+                    ),
+
+                  // Center Play/Pause Touch Overlay
+                  GestureDetector(
+                    onTap: _togglePlayPause,
+                    behavior: HitTestBehavior.translucent,
+                    child: Container(
+                      color: Colors.transparent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Bottom Player Control Toolbar (Play, Pause, Speed, Orientation)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: const Color(0xFF0F172A),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Progress Scrubber (for direct video)
+                  if (!_isYouTube && _videoController != null && _videoController!.value.isInitialized)
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                        trackHeight: 3,
+                        activeTrackColor: AppColors.skyBlue,
+                        inactiveTrackColor: Colors.white24,
+                        thumbColor: AppColors.skyBlue,
+                      ),
+                      child: Slider(
+                        value: _currentPosition.inMilliseconds.toDouble().clamp(0.0, _totalDuration.inMilliseconds.toDouble()),
+                        max: _totalDuration.inMilliseconds.toDouble() > 0 ? _totalDuration.inMilliseconds.toDouble() : 1.0,
+                        onChanged: (val) {
+                          _videoController!.seekTo(Duration(milliseconds: val.toInt()));
+                        },
+                      ),
+                    ),
+
+                  Row(
+                    children: [
+                      // Play/Pause Button
+                      IconButton(
+                        icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: AppColors.skyBlue, size: 38),
+                        onPressed: _togglePlayPause,
+                      ),
+
+                      // Time Indicator
+                      Text(
+                        '${_formatDuration(_currentPosition)} / ${_formatDuration(_totalDuration)}',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+
+                      const Spacer(),
+
+                      // Speed Selector Menu
+                      PopupMenuButton<double>(
+                        initialValue: _playbackSpeed,
+                        tooltip: 'Playback Speed',
+                        color: const Color(0xFF1E293B),
+                        onSelected: _setSpeed,
+                        itemBuilder: (context) => _speeds.map((s) => PopupMenuItem(
+                          value: s,
+                          child: Text(
+                            '${s}x',
+                            style: TextStyle(
+                              color: s == _playbackSpeed ? AppColors.skyBlue : Colors.white,
+                              fontWeight: s == _playbackSpeed ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        )).toList(),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF334155)),
+                          ),
+                          child: Text(
+                            '${_playbackSpeed}x',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      // Orientation / Fullscreen Toggle (Portrait vs Landscape)
+                      IconButton(
+                        tooltip: _isLandscape ? 'Exit Fullscreen' : 'Fullscreen Landscape',
+                        icon: Icon(_isLandscape ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.white, size: 26),
+                        onPressed: _toggleOrientation,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
