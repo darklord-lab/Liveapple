@@ -51,6 +51,8 @@ export function createApp(): Express {
 
   // 6. Serve Web Admin Console
   const candidatePaths = [
+    path.resolve(process.cwd(), 'admin-dist'),
+    path.resolve(process.cwd(), '../admin-dist'),
     path.resolve(process.cwd(), '../../_archive/admin/dist'),
     path.resolve(process.cwd(), '../_archive/admin/dist'),
     path.resolve(process.cwd(), '_archive/admin/dist'),
@@ -59,7 +61,7 @@ export function createApp(): Express {
   if (adminDist) {
     app.use('/admin', express.static(adminDist));
     app.get('/admin', (_req, res) => {
-      res.sendFile(path.join(adminDist, 'index.html'));
+      res.redirect('/admin/');
     });
     app.get('/admin/*', (_req, res) => {
       res.sendFile(path.join(adminDist, 'index.html'));
