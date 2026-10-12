@@ -5,9 +5,9 @@ class Endpoints {
   static const String remoteConfigUrl =
       'https://raw.githubusercontent.com/weblo32/Liveapple/main/server_config.json';
 
-  // Preset URLs
+  // Primary production backend (Render.com 24/7 hosting)
   static const String cloudflareTunnelUrl =
-      'https://virgin-tucson-payment-intimate.trycloudflare.com/api';
+      'https://liveapple.onrender.com/api';
   static const String localWifiUrl = 'http://10.186.250.171:4000/api';
   static const String emulatorUrl = 'http://10.0.2.2:4000/api';
   static const String localHostUrl = 'http://localhost:4000/api';
