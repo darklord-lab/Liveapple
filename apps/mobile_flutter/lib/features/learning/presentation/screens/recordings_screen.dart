@@ -11,6 +11,7 @@ import '../../../batch/presentation/batch_controller.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../controllers/learning_controller.dart';
 import '../../domain/models/learning_models.dart';
+import '../../../../core/services/pip_service.dart';
 
 class RecordingsScreen extends ConsumerWidget {
   const RecordingsScreen({super.key});
@@ -407,13 +408,25 @@ class _SecurePlayerScreenState extends State<SecurePlayerScreen> {
   double _playbackSpeed = 1.0;
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
+  late final PipService _pipService;
+  bool _isPipActive = false;
 
   final List<double> _speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
 
   @override
   void initState() {
     super.initState();
+    _pipService = PipService();
+    _pipService.isPipActiveNotifier.addListener(_onPipModeChanged);
     _initPlayer();
+  }
+
+  void _onPipModeChanged() {
+    if (mounted) {
+      setState(() {
+        _isPipActive = _pipService.isPipActive;
+      });
+    }
   }
 
   void _initPlayer() {
@@ -592,12 +605,25 @@ class _SecurePlayerScreenState extends State<SecurePlayerScreen> {
 
   @override
   void dispose() {
+    _pipService.isPipActiveNotifier.removeListener(_onPipModeChanged);
     // Always restore portrait mode upon exit
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
     ]);
     _videoController?.dispose();
     super.dispose();
+  }
+
+  Future<void> _enterPip() async {
+    final entered = await _pipService.enterPip(width: 16, height: 9);
+    if (!entered && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Picture-in-Picture is not supported on this device/platform'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   String _formatDuration(Duration d) {
@@ -609,8 +635,58 @@ class _SecurePlayerScreenState extends State<SecurePlayerScreen> {
     return '$minutes:$seconds';
   }
 
+  Widget _buildPlayerStage() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        if (_isYouTube && _webController != null)
+          WebViewWidget(controller: _webController!)
+        else if (_videoController != null && _videoController!.value.isInitialized)
+          Center(
+            child: AspectRatio(
+              aspectRatio: _videoController!.value.aspectRatio,
+              child: VideoPlayer(_videoController!),
+            ),
+          )
+        else if (_isLoading)
+          const Center(
+            child: CircularProgressIndicator(color: AppColors.skyBlue),
+          )
+        else
+          const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.videocam_off, color: AppColors.slate400, size: 48),
+                SizedBox(height: 10),
+                Text('Video Stream Ready', style: TextStyle(color: Colors.white70)),
+              ],
+            ),
+          ),
+
+        // Center Play/Pause Touch Overlay
+        GestureDetector(
+          onTap: _togglePlayPause,
+          behavior: HitTestBehavior.translucent,
+          child: Container(
+            color: Colors.transparent,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isPipActive) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: _buildPlayerStage(),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -666,44 +742,7 @@ class _SecurePlayerScreenState extends State<SecurePlayerScreen> {
 
             // Video Player Stage
             Expanded(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  if (_isYouTube && _webController != null)
-                    WebViewWidget(controller: _webController!)
-                  else if (_videoController != null && _videoController!.value.isInitialized)
-                    Center(
-                      child: AspectRatio(
-                        aspectRatio: _videoController!.value.aspectRatio,
-                        child: VideoPlayer(_videoController!),
-                      ),
-                    )
-                  else if (_isLoading)
-                    const Center(
-                      child: CircularProgressIndicator(color: AppColors.skyBlue),
-                    )
-                  else
-                    const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.videocam_off, color: AppColors.slate400, size: 48),
-                          SizedBox(height: 10),
-                          Text('Video Stream Ready', style: TextStyle(color: Colors.white70)),
-                        ],
-                      ),
-                    ),
-
-                  // Center Play/Pause Touch Overlay
-                  GestureDetector(
-                    onTap: _togglePlayPause,
-                    behavior: HitTestBehavior.translucent,
-                    child: Container(
-                      color: Colors.transparent,
-                    ),
-                  ),
-                ],
-              ),
+              child: _buildPlayerStage(),
             ),
 
             // Bottom Player Control Toolbar (Play, Pause, Speed, Orientation)
@@ -785,6 +824,16 @@ class _SecurePlayerScreenState extends State<SecurePlayerScreen> {
                         tooltip: _isLandscape ? 'Exit Fullscreen' : 'Fullscreen Landscape',
                         icon: Icon(_isLandscape ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.white, size: 26),
                         onPressed: _toggleOrientation,
+                      ),
+
+                      const SizedBox(width: 8),
+
+                      // Picture-in-Picture Button
+                      IconButton(
+                        key: const Key('enter_pip_recording_btn'),
+                        tooltip: 'Picture-in-Picture',
+                        icon: const Icon(Icons.picture_in_picture_alt, color: Colors.white, size: 24),
+                        onPressed: _enterPip,
                       ),
                     ],
                   ),

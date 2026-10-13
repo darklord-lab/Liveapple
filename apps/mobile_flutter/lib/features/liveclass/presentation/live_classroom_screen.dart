@@ -11,6 +11,7 @@ import '../domain/class_participant.dart';
 import 'live_class_controller.dart';
 import 'live_class_room_controller.dart';
 import '../../../screens/classroom/components/digital_board.dart';
+import '../../../core/services/pip_service.dart';
 
 class LiveClassroomScreen extends ConsumerStatefulWidget {
   final String classId;
@@ -743,12 +744,35 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                   },
                 ),
               ],
+              ListTile(
+                key: const Key('enter_pip_menu_tile'),
+                leading: const Icon(Icons.picture_in_picture_alt, color: AppColors.skyBlue),
+                title: const Text('Picture-in-Picture', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                subtitle: const Text('Minimize class to a floating window', style: TextStyle(color: AppColors.slate400, fontSize: 11)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _enterPip();
+                },
+              ),
               const SizedBox(height: 8),
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _enterPip() async {
+    final pipService = ref.read(pipServiceProvider);
+    final entered = await pipService.enterPip(width: 16, height: 9);
+    if (!entered && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Picture-in-Picture is not supported on this device/platform'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   @override
@@ -860,6 +884,16 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
     }
 
     final liveClass = roomState.liveClass;
+    final isPipActive = ref.watch(isPipActiveProvider);
+
+    if (isPipActive) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: _buildVideoStage(roomState),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
@@ -1028,6 +1062,17 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 8),
+
+          // Picture-in-Picture Button
+          IconButton(
+            key: const Key('enter_pip_topbar_btn'),
+            tooltip: 'Picture-in-Picture',
+            icon: const Icon(Icons.picture_in_picture_alt, size: 18, color: Colors.white70),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            onPressed: _enterPip,
           ),
           const SizedBox(width: 8),
 
