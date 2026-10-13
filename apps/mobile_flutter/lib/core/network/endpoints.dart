@@ -27,6 +27,8 @@ class Endpoints {
   static const String logout = '/v1/auth/logout';
   static const String acceptInvite = '/v1/auth/accept-invite';
   static const String me = '/v1/auth/me';
+  static const String updateProfile = '/v1/auth/profile';
+  static const String uploadAvatar = '/v1/auth/avatar';
 
   // Invites
   static const String validateInvite = '/v1/invites/validate';

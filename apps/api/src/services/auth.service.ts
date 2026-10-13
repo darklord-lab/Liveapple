@@ -1,9 +1,11 @@
+import path from 'path';
 import { prisma } from '../utils/prisma.js';
 import { hashPassword, verifyPassword, hashToken, generateRandomToken } from '../utils/hash.js';
 import { signAccessToken, TokenUserPayload } from '../utils/jwt.js';
 import { AppError } from '../errors/AppError.js';
 import { env } from '../config/env.js';
 import { logAudit } from './audit.service.js';
+import { avatarStorageService, UploadedFileInput } from './storage.service.js';
 
 export interface LoginParams {
   email: string;
@@ -14,6 +16,10 @@ export interface LoginParams {
 export interface AuthResult {
   accessToken: string;
   refreshToken: string;
+  tokens?: {
+    accessToken: string;
+    refreshToken: string;
+  };
   user: {
     id: string;
     instituteId: string;
@@ -21,6 +27,8 @@ export interface AuthResult {
     name: string;
     email: string;
     phone: string | null;
+    avatarUrl?: string | null;
+    notificationPrefs?: string | null;
     status: string;
     coachingName?: string | null;
     centreLogo?: string | null;
@@ -125,6 +133,8 @@ export class AuthService {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        avatarUrl: user.avatarUrl,
+        notificationPrefs: user.notificationPrefs,
         status: user.status,
         coachingName: user.coachingName,
         centreLogo: user.centreLogo,
@@ -468,6 +478,8 @@ export class AuthService {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        avatarUrl: user.avatarUrl,
+        notificationPrefs: user.notificationPrefs,
         status: user.status,
       },
       institute: {
@@ -476,5 +488,121 @@ export class AuthService {
         slug: user.institute.slug,
       },
     };
+  }
+
+  /**
+   * Update profile details (name, phone, notification preferences)
+   */
+  static async updateProfile(
+    userId: string,
+    data: {
+      name?: string;
+      phone?: string | null;
+      notificationPrefs?: string | Record<string, boolean>;
+    }
+  ) {
+    const updatePayload: {
+      name?: string;
+      phone?: string | null;
+      notificationPrefs?: string;
+    } = {};
+
+    if (data.name !== undefined) {
+      updatePayload.name = data.name.trim();
+    }
+    if (data.phone !== undefined) {
+      updatePayload.phone = data.phone && data.phone.trim().length > 0 ? data.phone.trim() : null;
+    }
+    if (data.notificationPrefs !== undefined) {
+      updatePayload.notificationPrefs =
+        typeof data.notificationPrefs === 'string'
+          ? data.notificationPrefs
+          : JSON.stringify(data.notificationPrefs);
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updatePayload,
+      include: {
+        institute: {
+          select: { id: true, name: true, slug: true, plan: true },
+        },
+        creatorTeacher: true,
+      },
+    });
+
+    await logAudit({
+      instituteId: updatedUser.instituteId,
+      actorId: userId,
+      action: 'PROFILE_UPDATED',
+      entity: 'USER',
+      meta: { updatedFields: Object.keys(updatePayload) },
+    });
+
+    return updatedUser;
+  }
+
+  /**
+   * Upload user avatar photo and save URL
+   */
+  static async uploadAvatar(userId: string, file: UploadedFileInput) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new AppError('NOT_FOUND', 'User record not found', 404);
+    }
+
+    // Save avatar through avatarStorageService
+    const result = await avatarStorageService.put(file);
+    const avatarUrl = `/api/v1/auth/avatar/${result.key}`;
+
+    // Clean up old avatar if it was stored locally
+    if (user.avatarUrl && user.avatarUrl.includes('/v1/auth/avatar/')) {
+      const oldKey = user.avatarUrl.split('/v1/auth/avatar/')[1];
+      if (oldKey) {
+        await avatarStorageService.delete(oldKey);
+      }
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl },
+      include: {
+        institute: {
+          select: { id: true, name: true, slug: true, plan: true },
+        },
+        creatorTeacher: true,
+      },
+    });
+
+    await logAudit({
+      instituteId: user.instituteId,
+      actorId: userId,
+      action: 'AVATAR_UPDATED',
+      entity: 'USER',
+      meta: { key: result.key, sizeBytes: result.sizeBytes },
+    });
+
+    return {
+      avatarUrl,
+      user: updatedUser,
+    };
+  }
+
+  /**
+   * Stream avatar file
+   */
+  static getAvatarStream(key: string) {
+    const mimeMap: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+    };
+    const ext = path.extname(key).toLowerCase();
+    const mimeType = mimeMap[ext] || 'application/octet-stream';
+    const stream = avatarStorageService.getStream(key);
+    return { stream, mimeType };
   }
 }

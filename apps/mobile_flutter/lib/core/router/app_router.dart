@@ -15,6 +15,7 @@ import '../../features/learning/presentation/screens/assignments_screen.dart';
 import '../../features/learning/presentation/screens/cbt_tests_screen.dart';
 import '../../features/learning/presentation/screens/fees_screen.dart';
 import '../../features/learning/presentation/screens/attendance_screen.dart';
+import '../../features/auth/presentation/edit_profile_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
@@ -69,6 +70,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/attendance',
         builder: (context, state) => const AttendanceScreen(),
+      ),
+      GoRoute(
+        path: '/edit-profile',
+        builder: (context, state) => EditProfileScreen(user: authState.user!),
       ),
     ],
     redirect: (BuildContext context, GoRouterState state) {

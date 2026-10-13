@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
@@ -44,9 +45,9 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
 
 
   // Settings toggles (Panel 6)
-  bool _classReminders = true;
-  bool _liveAlerts = true;
-  bool _homeworkAlerts = false;
+  late bool _classReminders;
+  late bool _liveAlerts;
+  late bool _homeworkAlerts;
 
   Timer? _fallbackPollingTimer;
   io.Socket? _globalSocket;
@@ -54,6 +55,10 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
   @override
   void initState() {
     super.initState();
+    _classReminders = widget.user.remindersEnabled;
+    _liveAlerts = widget.user.liveAlertsEnabled;
+    _homeworkAlerts = widget.user.homeworkEnabled;
+
     // 10-second fallback polling for live and upcoming classes (Phase C - C6)
     _fallbackPollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (mounted) {
@@ -67,6 +72,18 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
       ref.read(timetableProvider.notifier).loadSlots();
       _initGlobalSocket();
     });
+  }
+
+  Future<void> _syncNotificationPrefs() async {
+    final prefs = {
+      'reminders': _classReminders,
+      'liveAlerts': _liveAlerts,
+      'homework': _homeworkAlerts,
+      'testAlerts': true,
+    };
+    await ref.read(authStateProvider.notifier).updateProfile(
+      notificationPrefs: prefs,
+    );
   }
 
   /// Connects a background socket to receive instant 'class:live' push events.
@@ -373,8 +390,10 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
   /* PANEL 2: DRAWER                                                            */
   /* -------------------------------------------------------------------------- */
   Widget _buildDrawer() {
-    final instituteCode = (widget.user.institute != null && widget.user.institute!.id.length >= 6)
-        ? widget.user.institute!.id.substring(0, 6).toUpperCase()
+    final authState = ref.watch(authStateProvider);
+    final currentUser = authState.user ?? widget.user;
+    final instituteCode = (currentUser.institute != null && currentUser.institute!.id.length >= 6)
+        ? currentUser.institute!.id.substring(0, 6).toUpperCase()
         : 'APEX24';
 
     return Drawer(
@@ -390,10 +409,18 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
               ),
               child: Row(
                 children: [
-                  const CircleAvatar(
+                  CircleAvatar(
                     radius: 30,
-                    backgroundColor: AppColors.slate200,
-                    child: Icon(Icons.person_outline, size: 36, color: AppColors.slate500),
+                    backgroundColor: AppColors.skyBlueLight,
+                    backgroundImage: (currentUser.avatarUrl != null && currentUser.avatarUrl!.isNotEmpty)
+                        ? NetworkImage(currentUser.avatarUrl!)
+                        : null,
+                    child: (currentUser.avatarUrl == null || currentUser.avatarUrl!.isEmpty)
+                        ? Text(
+                            currentUser.name.isNotEmpty ? currentUser.name[0].toUpperCase() : 'U',
+                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.skyBlue),
+                          )
+                        : null,
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -401,19 +428,19 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.user.name,
+                          currentUser.name,
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: AppColors.textLight),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          widget.user.effectiveCoachingName,
+                          currentUser.effectiveCoachingName,
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.skyBlue),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 1),
                         Text(
-                          'Faculty: ${widget.user.effectiveFacultyName} • Code: $instituteCode',
+                          'Faculty: ${currentUser.effectiveFacultyName} • Code: $instituteCode',
                           style: const TextStyle(fontSize: 11, color: AppColors.slate500),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -496,9 +523,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                     label: 'Edit Profile',
                     onTap: () {
                       Navigator.pop(context);
-                      setState(() {
-                        _currentBottomNavIndex = 3;
-                      });
+                      context.push('/edit-profile');
                     },
                   ),
                   _buildDrawerItem(
@@ -537,17 +562,16 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
               child: SizedBox(
                 width: double.infinity,
                 height: 46,
-                child: ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Classora share link copied to clipboard!')),
-                    );
-                  },
+                child: ElevatedButton.icon(
+                  onPressed: _handleShareApp,
+                  icon: const Icon(Icons.share_outlined, size: 18),
+                  label: const Text('Share App with Classmates', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.skyBlue,
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    elevation: 0,
                   ),
-                  child: const Text('Share app', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
                 ),
               ),
             ),
@@ -1533,6 +1557,9 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
   /* PANEL 6: SETTINGS / PROFILE TAB                                            */
   /* -------------------------------------------------------------------------- */
   Widget _buildSettingsTab() {
+    final authState = ref.watch(authStateProvider);
+    final currentUser = authState.user ?? widget.user;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
@@ -1551,25 +1578,30 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                 CircleAvatar(
                   radius: 28,
                   backgroundColor: AppColors.skyBlueLight,
-                  child: Text(
-                    widget.user.name.isNotEmpty ? widget.user.name[0].toUpperCase() : 'U',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.skyBlue),
-                  ),
+                  backgroundImage: (currentUser.avatarUrl != null && currentUser.avatarUrl!.isNotEmpty)
+                      ? NetworkImage(currentUser.avatarUrl!)
+                      : null,
+                  child: (currentUser.avatarUrl == null || currentUser.avatarUrl!.isEmpty)
+                      ? Text(
+                          currentUser.name.isNotEmpty ? currentUser.name[0].toUpperCase() : 'U',
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.skyBlue),
+                        )
+                      : null,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.user.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text(currentUser.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 2),
-                      Text(widget.user.email, style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
+                      Text(currentUser.email, style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
                       const SizedBox(height: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(color: AppColors.skyBlueLight, borderRadius: BorderRadius.circular(4)),
                         child: Text(
-                          widget.user.role,
+                          currentUser.role,
                           style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.skyBlue),
                         ),
                       ),
@@ -1588,9 +1620,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
             subtitle: 'Name, photo, phone',
             trailing: const Icon(Icons.chevron_right, color: AppColors.slate400),
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Profile edit details will sync with institute portal')),
-              );
+              context.push('/edit-profile');
             },
           ),
           const Divider(height: 1, color: AppColors.borderLight),
@@ -1603,6 +1633,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
               setState(() {
                 _classReminders = val;
               });
+              _syncNotificationPrefs();
             },
           ),
           const Divider(height: 1, color: AppColors.borderLight),
@@ -1615,6 +1646,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
               setState(() {
                 _liveAlerts = val;
               });
+              _syncNotificationPrefs();
             },
           ),
           const Divider(height: 1, color: AppColors.borderLight),
@@ -1627,6 +1659,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
               setState(() {
                 _homeworkAlerts = val;
               });
+              _syncNotificationPrefs();
             },
           ),
           const Divider(height: 1, color: AppColors.borderLight),
@@ -1658,11 +1691,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Classora share link copied to clipboard!')),
-                    );
-                  },
+                  onPressed: _handleShareApp,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.skyBlue,
                     side: const BorderSide(color: AppColors.skyBlue),
@@ -1674,11 +1703,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
               const SizedBox(width: 14),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Thank you for rating Classora!')),
-                    );
-                  },
+                  onPressed: _showRateAppDialog,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.skyBlue,
                     side: const BorderSide(color: AppColors.skyBlue),
@@ -1830,6 +1855,97 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
         ],
+      ),
+    );
+  }
+
+  void _handleShareApp() {
+    final user = ref.read(authStateProvider).user ?? widget.user;
+    final shareText = 'Join my classroom on Classora! Access live classes, interactive quizzes, and study material.\nDownload App: https://classora.app/download\nInstitute: ${user.effectiveCoachingName}';
+    Clipboard.setData(ClipboardData(text: shareText));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Classora invite link copied to clipboard! Share it with your classmates.'),
+        backgroundColor: AppColors.skyBlue,
+      ),
+    );
+  }
+
+  void _showRateAppDialog() {
+    int selectedRating = 5;
+    final feedbackController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Rate Classora App', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'How is your classroom experience with Classora?',
+                style: TextStyle(fontSize: 13, color: AppColors.slate500),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) {
+                  final starIndex = index + 1;
+                  return IconButton(
+                    icon: Icon(
+                      starIndex <= selectedRating ? Icons.star_rounded : Icons.star_outline_rounded,
+                      color: Colors.amber,
+                      size: 34,
+                    ),
+                    onPressed: () {
+                      setDialogState(() {
+                        selectedRating = starIndex;
+                      });
+                    },
+                  );
+                }),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: feedbackController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: 'Any feedback or suggestions? (Optional)',
+                  hintStyle: const TextStyle(fontSize: 12, color: AppColors.slate400),
+                  contentPadding: const EdgeInsets.all(12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.borderLight),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Maybe Later', style: TextStyle(color: AppColors.slate500)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.skyBlue,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Thank you for rating Classora $selectedRating stars! Your review helps us improve.'),
+                    backgroundColor: AppColors.success,
+                  ),
+                );
+              },
+              child: const Text('Submit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
   }

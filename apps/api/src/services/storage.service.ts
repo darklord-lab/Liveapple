@@ -39,9 +39,17 @@ const SAFE_KEY_REGEX = /^[a-zA-Z0-9_\-]+\.[a-zA-Z0-9]+$/;
 
 export class LocalStorageService implements StorageService {
   private baseDir: string;
+  private maxSizeBytes: number;
+  private allowedMimeTypes: Record<string, string>;
 
-  constructor(customDir?: string) {
+  constructor(
+    customDir?: string,
+    maxSizeBytes?: number,
+    allowedMimeTypes?: Record<string, string>
+  ) {
     this.baseDir = customDir || path.resolve(process.cwd(), 'uploads', 'materials');
+    this.maxSizeBytes = maxSizeBytes || MAX_FILE_SIZE_BYTES;
+    this.allowedMimeTypes = allowedMimeTypes || MIME_EXTENSION_MAP;
     if (!fs.existsSync(this.baseDir)) {
       fs.mkdirSync(this.baseDir, { recursive: true });
     }
@@ -49,20 +57,20 @@ export class LocalStorageService implements StorageService {
 
   async put(file: UploadedFileInput): Promise<StoragePutResult> {
     // 1. File size check
-    if (file.size > MAX_FILE_SIZE_BYTES) {
+    if (file.size > this.maxSizeBytes) {
       throw new AppError(
         'FILE_TOO_LARGE',
-        `File size exceeds maximum allowed limit of ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB`,
+        `File size exceeds maximum allowed limit of ${Math.round(this.maxSizeBytes / (1024 * 1024))}MB`,
         400
       );
     }
 
     // 2. MIME type allowlist check
-    const extension = MIME_EXTENSION_MAP[file.mimetype.toLowerCase()];
+    const extension = this.allowedMimeTypes[file.mimetype.toLowerCase()];
     if (!extension) {
       throw new AppError(
         'INVALID_FILE_TYPE',
-        `Unsupported file type '${file.mimetype}'. Allowed types: PDF, DOC, DOCX, JPEG, PNG, WEBP`,
+        `Unsupported file type '${file.mimetype}'. Allowed types: ${Object.keys(this.allowedMimeTypes).join(', ')}`,
         400
       );
     }
@@ -125,3 +133,13 @@ export function getStorageService(): StorageService {
 export function setStorageService(service: StorageService): void {
   storageInstance = service;
 }
+
+export const avatarStorageService = new LocalStorageService(
+  path.resolve(process.cwd(), 'uploads', 'avatars'),
+  5 * 1024 * 1024, // 5MB max for profile photos
+  {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+  }
+);

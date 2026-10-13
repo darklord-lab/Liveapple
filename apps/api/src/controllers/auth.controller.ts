@@ -24,6 +24,12 @@ const acceptInviteSchema = z.object({
   deviceId: z.string().optional(),
 });
 
+const updateProfileSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name must not exceed 100 characters').optional(),
+  phone: z.string().max(25, 'Phone number must not exceed 25 characters').optional().nullable(),
+  notificationPrefs: z.union([z.record(z.boolean()), z.string()]).optional(),
+});
+
 export class AuthController {
   static async login(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -94,6 +100,8 @@ export class AuthController {
           name: user.name,
           email: user.email,
           phone: user.phone,
+          avatarUrl: user.avatarUrl,
+          notificationPrefs: user.notificationPrefs,
           status: user.status,
           coachingName: user.coachingName,
           centreLogo: user.centreLogo,
@@ -131,6 +139,99 @@ export class AuthController {
             }
           : null,
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+      }
+      const validated = updateProfileSchema.parse(req.body);
+      const user = await AuthService.updateProfile(req.user.userId, validated);
+      res.status(200).json({
+        message: 'Profile updated successfully',
+        user: {
+          id: user.id,
+          instituteId: user.instituteId,
+          role: user.role,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          avatarUrl: user.avatarUrl,
+          notificationPrefs: user.notificationPrefs,
+          status: user.status,
+          coachingName: user.coachingName,
+          centreLogo: user.centreLogo,
+          centreAddress: user.centreAddress,
+          contactPhone: user.contactPhone,
+          bio: user.bio,
+          subjects: user.subjects,
+          institute: user.institute,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async uploadAvatar(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+      }
+      if (!req.file) {
+        throw new AppError('BAD_REQUEST', 'No image file uploaded', 400);
+      }
+
+      const file = {
+        buffer: req.file.buffer,
+        mimetype: req.file.mimetype,
+        originalname: req.file.originalname,
+        size: req.file.size,
+      };
+
+      const result = await AuthService.uploadAvatar(req.user.userId, file);
+      res.status(200).json({
+        message: 'Profile photo updated successfully',
+        avatarUrl: result.avatarUrl,
+        user: {
+          id: result.user.id,
+          instituteId: result.user.instituteId,
+          role: result.user.role,
+          name: result.user.name,
+          email: result.user.email,
+          phone: result.user.phone,
+          avatarUrl: result.user.avatarUrl,
+          notificationPrefs: result.user.notificationPrefs,
+          status: result.user.status,
+          coachingName: result.user.coachingName,
+          centreLogo: result.user.centreLogo,
+          centreAddress: result.user.centreAddress,
+          contactPhone: result.user.contactPhone,
+          bio: result.user.bio,
+          subjects: result.user.subjects,
+          institute: result.user.institute,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getAvatar(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const key = req.params.key;
+      if (!key) {
+        throw new AppError('BAD_REQUEST', 'Avatar key is required', 400);
+      }
+      const { stream, mimeType } = AuthService.getAvatarStream(key);
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      stream.on('error', (err) => next(err));
+      stream.pipe(res);
     } catch (err) {
       next(err);
     }

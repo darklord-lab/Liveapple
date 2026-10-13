@@ -32,12 +32,12 @@ Legend: `[x]` done and proven · `[v]` reported done, needs verification on real
 - [x] 3.2 Student: Schedule, Batches/Join, Learn (Study Material · Recordings · Assignments · Tests)
 - [x] 3.3 Teacher: Home tiles, Timetable (overflow fixed), Batch detail, Live Classes
 - [x] 3.4 Admin: Overview, Teachers, Batches, Fees
-- [ ] 3.5 Live classroom restyle (dark Meet-like), PiP, reconnect banner
-- [ ] 3.6 Login in new style, consistency pass, overflow tests 320/360 dp
+- [x] 3.5 Live classroom restyle (dark Meet-like), PiP, reconnect banner
+- [x] 3.6 Login in new style, consistency pass, overflow tests 320/360 dp
 
 ## Stage 4 — New features
-- [ ] 4.1 Study Material: folders, upload (PDF/doc/link), free flag, student view/download, storage adapter, upload security tests
-- [ ] 4.2 Edit Profile (photo via camera/gallery), Settings (notification prefs, share, rate, sign out, version)
+- [x] 4.1 Study Material: folders, upload (PDF/doc/link), free flag, student view/download, storage adapter, upload security tests
+- [x] 4.2 Edit Profile (photo via camera/gallery), Settings (notification prefs, share, rate, sign out, version)
 - [ ] 4.3 Help / How to use (per-role walkthrough)
 - [ ] 4.4 Institute Links ("Connect With Us") + Testimonials (admin CRUD, student view)
 - [ ] 4.5 Institute Code + white-label (code entry, name/logo/color in app bar)

@@ -48,6 +48,8 @@ model User {
   name                String
   email               String
   phone               String?
+  avatarUrl           String?
+  notificationPrefs   String?         @default("{\"reminders\":true,\"liveAlerts\":true,\"homework\":true,\"testAlerts\":true}")
   passwordHash        String
   status              String          @default("ACTIVE") // "ACTIVE" | "INVITED" | "SUSPENDED"
   fcmToken            String?

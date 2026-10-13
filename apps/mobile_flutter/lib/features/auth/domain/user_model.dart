@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class UserModel {
   final String id;
   final String instituteId;
@@ -5,6 +7,8 @@ class UserModel {
   final String name;
   final String email;
   final String? phone;
+  final String? avatarUrl;
+  final String? notificationPrefs;
   final String status;
   final InstituteModel? institute;
   final TeacherProfileModel? teacher;
@@ -22,6 +26,8 @@ class UserModel {
     required this.name,
     required this.email,
     this.phone,
+    this.avatarUrl,
+    this.notificationPrefs,
     required this.status,
     this.institute,
     this.teacher,
@@ -45,6 +51,24 @@ class UserModel {
   String get effectiveFacultyName =>
       teacher?.name ?? (isTeacher ? name : 'Classora Faculty');
 
+  /// Parse notification preferences map safely
+  Map<String, dynamic> get parsedNotificationPrefs {
+    if (notificationPrefs == null || notificationPrefs!.isEmpty) {
+      return {'reminders': true, 'liveAlerts': true, 'homework': true, 'testAlerts': true};
+    }
+    try {
+      final decoded = jsonDecode(notificationPrefs!);
+      if (decoded is Map<String, dynamic>) return decoded;
+      return {'reminders': true, 'liveAlerts': true, 'homework': true, 'testAlerts': true};
+    } catch (_) {
+      return {'reminders': true, 'liveAlerts': true, 'homework': true, 'testAlerts': true};
+    }
+  }
+
+  bool get remindersEnabled => parsedNotificationPrefs['reminders'] as bool? ?? true;
+  bool get liveAlertsEnabled => parsedNotificationPrefs['liveAlerts'] as bool? ?? true;
+  bool get homeworkEnabled => parsedNotificationPrefs['homework'] as bool? ?? true;
+
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       id: json['id'] as String,
@@ -53,6 +77,10 @@ class UserModel {
       name: json['name'] as String,
       email: json['email'] as String,
       phone: json['phone'] as String?,
+      avatarUrl: json['avatarUrl'] as String?,
+      notificationPrefs: json['notificationPrefs'] is Map
+          ? jsonEncode(json['notificationPrefs'])
+          : json['notificationPrefs'] as String?,
       status: json['status'] as String? ?? 'ACTIVE',
       institute: json['institute'] != null
           ? InstituteModel.fromJson(json['institute'] as Map<String, dynamic>)
@@ -77,6 +105,8 @@ class UserModel {
       'name': name,
       'email': email,
       if (phone != null) 'phone': phone,
+      if (avatarUrl != null) 'avatarUrl': avatarUrl,
+      if (notificationPrefs != null) 'notificationPrefs': notificationPrefs,
       'status': status,
       if (institute != null) 'institute': institute!.toJson(),
       if (teacher != null) 'teacher': teacher!.toJson(),
@@ -87,6 +117,46 @@ class UserModel {
       if (bio != null) 'bio': bio,
       if (subjects != null) 'subjects': subjects,
     };
+  }
+
+  UserModel copyWith({
+    String? id,
+    String? instituteId,
+    String? role,
+    String? name,
+    String? email,
+    String? phone,
+    String? avatarUrl,
+    String? notificationPrefs,
+    String? status,
+    InstituteModel? institute,
+    TeacherProfileModel? teacher,
+    String? coachingName,
+    String? centreLogo,
+    String? centreAddress,
+    String? contactPhone,
+    String? bio,
+    String? subjects,
+  }) {
+    return UserModel(
+      id: id ?? this.id,
+      instituteId: instituteId ?? this.instituteId,
+      role: role ?? this.role,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      notificationPrefs: notificationPrefs ?? this.notificationPrefs,
+      status: status ?? this.status,
+      institute: institute ?? this.institute,
+      teacher: teacher ?? this.teacher,
+      coachingName: coachingName ?? this.coachingName,
+      centreLogo: centreLogo ?? this.centreLogo,
+      centreAddress: centreAddress ?? this.centreAddress,
+      contactPhone: contactPhone ?? this.contactPhone,
+      bio: bio ?? this.bio,
+      subjects: subjects ?? this.subjects,
+    );
   }
 }
 

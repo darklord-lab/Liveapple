@@ -151,4 +151,60 @@ class AuthRepository {
       await _storage.clearAll();
     }
   }
+
+  Future<UserModel> updateProfile({
+    String? name,
+    String? phone,
+    Map<String, dynamic>? notificationPrefs,
+  }) async {
+    try {
+      final payload = <String, dynamic>{};
+      if (name != null) payload['name'] = name;
+      if (phone != null) payload['phone'] = phone;
+      if (notificationPrefs != null) payload['notificationPrefs'] = notificationPrefs;
+
+      final response = await _apiClient.dio.patch(
+        Endpoints.updateProfile,
+        data: payload,
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final userData = data['user'] as Map<String, dynamic>;
+      final user = UserModel.fromJson(userData);
+      await _storage.saveCachedUser(jsonEncode(user.toJson()));
+      return user;
+    } on DioException catch (e) {
+      if (e.error is AppException) throw e.error as AppException;
+      final msg = e.response?.data is Map
+          ? (e.response!.data['message'] ?? 'Failed to update profile')
+          : 'Failed to update profile';
+      throw AppException(code: 'PROFILE_UPDATE_FAILED', message: msg.toString());
+    }
+  }
+
+  Future<UserModel> uploadAvatar(String filePath) async {
+    try {
+      final fileName = filePath.split(RegExp(r'[/\\]')).last;
+      final formData = FormData.fromMap({
+        'avatar': await MultipartFile.fromFile(filePath, filename: fileName),
+      });
+
+      final response = await _apiClient.dio.post(
+        Endpoints.uploadAvatar,
+        data: formData,
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final userData = data['user'] as Map<String, dynamic>;
+      final user = UserModel.fromJson(userData);
+      await _storage.saveCachedUser(jsonEncode(user.toJson()));
+      return user;
+    } on DioException catch (e) {
+      if (e.error is AppException) throw e.error as AppException;
+      final msg = e.response?.data is Map
+          ? (e.response!.data['message'] ?? 'Failed to upload photo')
+          : 'Failed to upload photo';
+      throw AppException(code: 'AVATAR_UPLOAD_FAILED', message: msg.toString());
+    }
+  }
 }

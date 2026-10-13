@@ -55,4 +55,6 @@ yarn-error.log*
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+# Uploads
+uploads/
+apps/api/uploads/

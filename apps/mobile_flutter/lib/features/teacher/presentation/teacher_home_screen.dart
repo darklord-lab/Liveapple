@@ -42,11 +42,25 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
   @override
   void initState() {
     super.initState();
+    _classReminders = widget.user.remindersEnabled;
+    _liveAlerts = widget.user.liveAlertsEnabled;
     Future.microtask(() {
       ref.read(batchListProvider.notifier).loadBatches();
       ref.read(timetableProvider.notifier).loadSlots();
       ref.read(liveClassProvider.notifier).loadClasses();
     });
+  }
+
+  Future<void> _syncNotificationPrefs() async {
+    final prefs = {
+      'reminders': _classReminders,
+      'liveAlerts': _liveAlerts,
+      'homework': true,
+      'testAlerts': true,
+    };
+    await ref.read(authStateProvider.notifier).updateProfile(
+      notificationPrefs: prefs,
+    );
   }
 
   void _showCreateBatch() {
@@ -1249,6 +1263,9 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
   /* TAB 3: PROFILE / SETTINGS                                                  */
   /* -------------------------------------------------------------------------- */
   Widget _buildProfileTab() {
+    final authState = ref.watch(authStateProvider);
+    final currentUser = authState.user ?? widget.user;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
@@ -1266,19 +1283,24 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                 CircleAvatar(
                   radius: 28,
                   backgroundColor: AppColors.skyBlueLight,
-                  child: Text(
-                    widget.user.name.isNotEmpty ? widget.user.name[0].toUpperCase() : 'F',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.skyBlue),
-                  ),
+                  backgroundImage: (currentUser.avatarUrl != null && currentUser.avatarUrl!.isNotEmpty)
+                      ? NetworkImage(currentUser.avatarUrl!)
+                      : null,
+                  child: (currentUser.avatarUrl == null || currentUser.avatarUrl!.isEmpty)
+                      ? Text(
+                          currentUser.name.isNotEmpty ? currentUser.name[0].toUpperCase() : 'F',
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.skyBlue),
+                        )
+                      : null,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.user.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textLight)),
+                      Text(currentUser.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textLight)),
                       const SizedBox(height: 2),
-                      Text(widget.user.email, style: const TextStyle(fontSize: 13, color: AppColors.slate500)),
+                      Text(currentUser.email, style: const TextStyle(fontSize: 13, color: AppColors.slate500)),
                       const SizedBox(height: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1295,12 +1317,26 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
 
           ListTile(
             contentPadding: EdgeInsets.zero,
+            title: const Text('Edit Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textLight)),
+            subtitle: const Text('Name, photo, phone', style: TextStyle(fontSize: 12, color: AppColors.slate500)),
+            trailing: const Icon(Icons.chevron_right, color: AppColors.slate400),
+            onTap: () {
+              context.push('/edit-profile');
+            },
+          ),
+          const Divider(height: 1, color: AppColors.borderLight),
+
+          ListTile(
+            contentPadding: EdgeInsets.zero,
             title: const Text('Class schedule reminders', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textLight)),
             subtitle: const Text('Notify 15m prior to scheduled sessions', style: TextStyle(fontSize: 12, color: AppColors.slate500)),
             trailing: Switch(
               value: _classReminders,
               activeColor: AppColors.skyBlue,
-              onChanged: (v) => setState(() => _classReminders = v),
+              onChanged: (v) {
+                setState(() => _classReminders = v);
+                _syncNotificationPrefs();
+              },
             ),
           ),
           const Divider(height: 1, color: AppColors.borderLight),
@@ -1312,7 +1348,10 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
             trailing: Switch(
               value: _liveAlerts,
               activeColor: AppColors.skyBlue,
-              onChanged: (v) => setState(() => _liveAlerts = v),
+              onChanged: (v) {
+                setState(() => _liveAlerts = v);
+                _syncNotificationPrefs();
+              },
             ),
           ),
           const Divider(height: 1, color: AppColors.borderLight),
@@ -1332,8 +1371,9 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () {
-                    Clipboard.setData(const ClipboardData(text: 'Classora Faculty App'));
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Classora Faculty share link copied!')));
+                    final shareText = 'Join my faculty classes on Classora! Download App: https://classora.app/download\nInstitute: ${currentUser.effectiveCoachingName}';
+                    Clipboard.setData(ClipboardData(text: shareText));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Classora Faculty share link copied to clipboard!')));
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.skyBlue,
@@ -1346,9 +1386,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
               const SizedBox(width: 14),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thank you for rating Classora!')));
-                  },
+                  onPressed: _showRateAppDialog,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.skyBlue,
                     side: const BorderSide(color: AppColors.skyBlue),
@@ -1405,6 +1443,85 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Got it')),
         ],
+      ),
+    );
+  }
+
+  void _showRateAppDialog() {
+    int selectedRating = 5;
+    final feedbackController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Rate Classora App', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'How is your teaching experience with Classora?',
+                style: TextStyle(fontSize: 13, color: AppColors.slate500),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) {
+                  final starIndex = index + 1;
+                  return IconButton(
+                    icon: Icon(
+                      starIndex <= selectedRating ? Icons.star_rounded : Icons.star_outline_rounded,
+                      color: Colors.amber,
+                      size: 34,
+                    ),
+                    onPressed: () {
+                      setDialogState(() {
+                        selectedRating = starIndex;
+                      });
+                    },
+                  );
+                }),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: feedbackController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: 'Any teaching feedback or feature suggestions? (Optional)',
+                  hintStyle: const TextStyle(fontSize: 12, color: AppColors.slate400),
+                  contentPadding: const EdgeInsets.all(12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.borderLight),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Maybe Later', style: TextStyle(color: AppColors.slate500)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.skyBlue,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Thank you for rating Classora $selectedRating stars! We value your feedback.'),
+                    backgroundColor: AppColors.success,
+                  ),
+                );
+              },
+              child: const Text('Submit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
   }

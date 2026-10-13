@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_state.dart';
+import '../domain/user_model.dart';
 import '../../../core/errors/app_exception.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -78,5 +79,37 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> logout() async {
     await _repository.logout();
     state = AuthState.unauthenticated();
+  }
+
+  Future<bool> updateProfile({
+    String? name,
+    String? phone,
+    Map<String, dynamic>? notificationPrefs,
+  }) async {
+    try {
+      final user = await _repository.updateProfile(
+        name: name,
+        phone: phone,
+        notificationPrefs: notificationPrefs,
+      );
+      state = AuthState.authenticated(user);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> uploadAvatar(String filePath) async {
+    try {
+      final user = await _repository.uploadAvatar(filePath);
+      state = AuthState.authenticated(user);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void updateLocalUser(UserModel user) {
+    state = AuthState.authenticated(user);
   }
 }
