@@ -9,17 +9,110 @@ import '../../domain/models/learning_models.dart';
 import '../../domain/models/test_share_model.dart';
 import '../widgets/test_score_share_card.dart';
 
-class CbtTestsScreen extends ConsumerWidget {
+import '../../../../core/widgets/filter_sort_sheet.dart';
+
+class CbtTestsScreen extends ConsumerStatefulWidget {
   const CbtTestsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CbtTestsScreen> createState() => _CbtTestsScreenState();
+}
+
+class _CbtTestsScreenState extends ConsumerState<CbtTestsScreen> {
+  String _selectedBatch = 'ALL';
+  String _selectedSubject = 'ALL';
+  String _selectedStatus = 'ALL';
+  String _selectedSort = 'default';
+
+  int get _activeCount =>
+      (_selectedBatch != 'ALL' ? 1 : 0) +
+      (_selectedSubject != 'ALL' ? 1 : 0) +
+      (_selectedStatus != 'ALL' ? 1 : 0) +
+      (_selectedSort != 'default' ? 1 : 0);
+
+  void _resetFilters() {
+    setState(() {
+      _selectedBatch = 'ALL';
+      _selectedSubject = 'ALL';
+      _selectedStatus = 'ALL';
+      _selectedSort = 'default';
+    });
+  }
+
+  Future<void> _openFilterSortSheet(List<CbtTestModel> tests) async {
+    final batches = {'ALL', ...tests.map((t) => t.batchName).where((b) => b != null && b.isNotEmpty).cast<String>()}.toList();
+    final subjects = {'ALL', ...tests.map((t) => t.subject).where((s) => s != null && s.isNotEmpty).cast<String>()}.toList();
+
+    final result = await showFilterSortSheet<String>(
+      context: context,
+      title: 'Filter & Sort Tests',
+      filters: [
+        FilterConfig<String>(
+          id: 'batch',
+          title: 'Batch',
+          options: batches.map((b) => FilterItem(value: b, label: b == 'ALL' ? 'All Batches' : b)).toList(),
+          initialValue: _selectedBatch,
+          defaultValue: 'ALL',
+        ),
+        if (subjects.length > 1)
+          FilterConfig<String>(
+            id: 'subject',
+            title: 'Subject',
+            options: subjects.map((s) => FilterItem(value: s, label: s == 'ALL' ? 'All Subjects' : s)).toList(),
+            initialValue: _selectedSubject,
+            defaultValue: 'ALL',
+          ),
+        const FilterConfig<String>(
+          id: 'status',
+          title: 'Attempt Status',
+          options: [
+            FilterItem(value: 'ALL', label: 'All Tests', icon: Icons.all_inclusive),
+            FilterItem(value: 'UNATTEMPTED', label: 'Unattempted (Pending)', icon: Icons.pending_actions),
+            FilterItem(value: 'ATTEMPTED', label: 'Attempted (Completed)', icon: Icons.check_circle_outline),
+          ],
+          initialValue: 'ALL',
+          defaultValue: 'ALL',
+        ),
+      ],
+      sort: SortConfig<String>(
+        title: 'Sort Order',
+        options: const [
+          SortOptionItem(value: 'default', label: 'Default Order', icon: Icons.sort),
+          SortOptionItem(value: 'duration_desc', label: 'Duration: Longest First', icon: Icons.hourglass_top),
+          SortOptionItem(value: 'duration_asc', label: 'Duration: Shortest First', icon: Icons.hourglass_bottom),
+          SortOptionItem(value: 'marks_desc', label: 'Total Marks: Highest First', icon: Icons.grade),
+        ],
+        initialValue: _selectedSort,
+        defaultValue: 'default',
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedBatch = result.getFilter('batch', 'ALL');
+        _selectedSubject = result.getFilter('subject', 'ALL');
+        _selectedStatus = result.getFilter('status', 'ALL');
+        _selectedSort = result.sortValue ?? 'default';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final testsAsync = ref.watch(cbtTestsProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tests & Quizzes (CBT)', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          FilterBadgeButton(
+            activeCount: _activeCount,
+            tooltip: 'Filter & Sort Tests',
+            onPressed: () {
+              final tests = testsAsync.valueOrNull ?? [];
+              _openFilterSortSheet(tests);
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.invalidate(cbtTestsProvider),
@@ -40,14 +133,76 @@ class CbtTestsScreen extends ConsumerWidget {
             );
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: tests.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final item = tests[index];
-              return _buildTestCard(context, ref, item);
-            },
+          var filtered = tests.where((item) {
+            if (_selectedBatch != 'ALL' && (item.batchName ?? '') != _selectedBatch) return false;
+            if (_selectedSubject != 'ALL' && (item.subject ?? '') != _selectedSubject) return false;
+            if (_selectedStatus == 'UNATTEMPTED' && item.isAttempted) return false;
+            if (_selectedStatus == 'ATTEMPTED' && !item.isAttempted) return false;
+            return true;
+          }).toList();
+
+          if (_selectedSort == 'duration_desc') {
+            filtered.sort((a, b) => b.durationMin.compareTo(a.durationMin));
+          } else if (_selectedSort == 'duration_asc') {
+            filtered.sort((a, b) => a.durationMin.compareTo(b.durationMin));
+          } else if (_selectedSort == 'marks_desc') {
+            filtered.sort((a, b) => b.totalMarks.compareTo(a.totalMarks));
+          }
+
+          return Column(
+            children: [
+              if (_activeCount > 0)
+                ActiveFiltersBar(
+                  chips: [
+                    if (_selectedBatch != 'ALL')
+                      ActiveFilterChipData(
+                        label: 'Batch: $_selectedBatch',
+                        onRemoved: () => setState(() => _selectedBatch = 'ALL'),
+                      ),
+                    if (_selectedSubject != 'ALL')
+                      ActiveFilterChipData(
+                        label: 'Subject: $_selectedSubject',
+                        onRemoved: () => setState(() => _selectedSubject = 'ALL'),
+                      ),
+                    if (_selectedStatus != 'ALL')
+                      ActiveFilterChipData(
+                        label: 'Status: ${_selectedStatus == 'ATTEMPTED' ? 'Attempted' : 'Unattempted'}',
+                        onRemoved: () => setState(() => _selectedStatus = 'ALL'),
+                      ),
+                    if (_selectedSort != 'default')
+                      ActiveFilterChipData(
+                        label: _selectedSort == 'duration_desc'
+                            ? 'Longest duration'
+                            : _selectedSort == 'duration_asc'
+                                ? 'Shortest duration'
+                                : 'Highest marks',
+                        onRemoved: () => setState(() => _selectedSort = 'default'),
+                      ),
+                  ],
+                  onClearAll: _resetFilters,
+                ),
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(
+                        child: EmptyState(
+                          icon: Icons.filter_list_off,
+                          title: 'No matching tests',
+                          subtitle: 'No tests match the selected filter criteria.',
+                          buttonText: 'Reset Filters',
+                          onAction: _resetFilters,
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final item = filtered[index];
+                          return _buildTestCard(context, ref, item);
+                        },
+                      ),
+              ),
+            ],
           );
         },
       ),

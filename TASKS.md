@@ -43,7 +43,7 @@ Legend: `[x]` done and proven · `[v]` reported done, needs verification on real
 - [x] 4.5 Institute Code + white-label (code entry, name/logo/color in app bar)
 - [x] 4.6 Share score + app link (share card, deep link)
 - [x] 4.7 Picture-in-Picture (live class, recordings; Android first)
-- [ ] 4.8 Filters + Sort sheets on lists (batch, subject, status, newest)
+- [x] 4.8 Filters + Sort sheets on lists (batch, subject, status, newest)
 
 ## Stage 5 — Notifications
 - [ ] Firebase project + credentials (user adds later), FCM in Flutter + server provider, deep link to live class

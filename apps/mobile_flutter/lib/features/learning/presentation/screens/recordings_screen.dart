@@ -13,11 +13,81 @@ import '../controllers/learning_controller.dart';
 import '../../domain/models/learning_models.dart';
 import '../../../../core/services/pip_service.dart';
 
-class RecordingsScreen extends ConsumerWidget {
+import '../../../../core/widgets/filter_sort_sheet.dart';
+
+class RecordingsScreen extends ConsumerStatefulWidget {
   const RecordingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RecordingsScreen> createState() => _RecordingsScreenState();
+}
+
+class _RecordingsScreenState extends ConsumerState<RecordingsScreen> {
+  String _selectedBatch = 'ALL';
+  String _selectedSubject = 'ALL';
+  String _selectedSort = 'newest';
+
+  int get _activeCount =>
+      (_selectedBatch != 'ALL' ? 1 : 0) +
+      (_selectedSubject != 'ALL' ? 1 : 0) +
+      (_selectedSort != 'newest' ? 1 : 0);
+
+  void _resetFilters() {
+    setState(() {
+      _selectedBatch = 'ALL';
+      _selectedSubject = 'ALL';
+      _selectedSort = 'newest';
+    });
+  }
+
+  Future<void> _openFilterSortSheet(List<RecordingModel> recordings) async {
+    final batches = {'ALL', ...recordings.map((r) => r.batchName).where((b) => b != null && b.isNotEmpty).cast<String>()}.toList();
+    final subjects = {'ALL', ...recordings.map((r) => r.subject).where((s) => s != null && s.isNotEmpty).cast<String>()}.toList();
+
+    final result = await showFilterSortSheet<String>(
+      context: context,
+      title: 'Filter & Sort Recordings',
+      filters: [
+        FilterConfig<String>(
+          id: 'batch',
+          title: 'Batch',
+          options: batches.map((b) => FilterItem(value: b, label: b == 'ALL' ? 'All Batches' : b)).toList(),
+          initialValue: _selectedBatch,
+          defaultValue: 'ALL',
+        ),
+        if (subjects.length > 1)
+          FilterConfig<String>(
+            id: 'subject',
+            title: 'Subject',
+            options: subjects.map((s) => FilterItem(value: s, label: s == 'ALL' ? 'All Subjects' : s)).toList(),
+            initialValue: _selectedSubject,
+            defaultValue: 'ALL',
+          ),
+      ],
+      sort: SortConfig<String>(
+        title: 'Sort Recordings',
+        options: const [
+          SortOptionItem(value: 'newest', label: 'Newest First', icon: Icons.schedule),
+          SortOptionItem(value: 'oldest', label: 'Oldest First', icon: Icons.history),
+          SortOptionItem(value: 'duration_desc', label: 'Duration: Longest First', icon: Icons.hourglass_top),
+          SortOptionItem(value: 'duration_asc', label: 'Duration: Shortest First', icon: Icons.hourglass_bottom),
+        ],
+        initialValue: _selectedSort,
+        defaultValue: 'newest',
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedBatch = result.getFilter('batch', 'ALL');
+        _selectedSubject = result.getFilter('subject', 'ALL');
+        _selectedSort = result.sortValue ?? 'newest';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final recordingsAsync = ref.watch(recordingsProvider);
     final currentUser = ref.watch(authStateProvider).user;
     final canUpload = currentUser?.role == 'TEACHER' || currentUser?.role == 'ADMIN';
@@ -26,6 +96,14 @@ class RecordingsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Recorded Lectures', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          FilterBadgeButton(
+            activeCount: _activeCount,
+            tooltip: 'Filter & Sort Recordings',
+            onPressed: () {
+              final recordings = recordingsAsync.valueOrNull ?? [];
+              _openFilterSortSheet(recordings);
+            },
+          ),
           if (canUpload)
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
@@ -72,14 +150,71 @@ class RecordingsScreen extends ConsumerWidget {
             );
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: recordings.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final item = recordings[index];
-              return _buildRecordingCard(context, item);
-            },
+          var filtered = recordings.where((item) {
+            if (_selectedBatch != 'ALL' && (item.batchName ?? '') != _selectedBatch) return false;
+            if (_selectedSubject != 'ALL' && (item.subject ?? '') != _selectedSubject) return false;
+            return true;
+          }).toList();
+
+          if (_selectedSort == 'newest') {
+            filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          } else if (_selectedSort == 'oldest') {
+            filtered.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          } else if (_selectedSort == 'duration_desc') {
+            filtered.sort((a, b) => b.durationSec.compareTo(a.durationSec));
+          } else if (_selectedSort == 'duration_asc') {
+            filtered.sort((a, b) => a.durationSec.compareTo(b.durationSec));
+          }
+
+          return Column(
+            children: [
+              if (_activeCount > 0)
+                ActiveFiltersBar(
+                  chips: [
+                    if (_selectedBatch != 'ALL')
+                      ActiveFilterChipData(
+                        label: 'Batch: $_selectedBatch',
+                        onRemoved: () => setState(() => _selectedBatch = 'ALL'),
+                      ),
+                    if (_selectedSubject != 'ALL')
+                      ActiveFilterChipData(
+                        label: 'Subject: $_selectedSubject',
+                        onRemoved: () => setState(() => _selectedSubject = 'ALL'),
+                      ),
+                    if (_selectedSort != 'newest')
+                      ActiveFilterChipData(
+                        label: _selectedSort == 'oldest'
+                            ? 'Oldest first'
+                            : _selectedSort == 'duration_desc'
+                                ? 'Longest duration'
+                                : 'Shortest duration',
+                        onRemoved: () => setState(() => _selectedSort = 'newest'),
+                      ),
+                  ],
+                  onClearAll: _resetFilters,
+                ),
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(
+                        child: EmptyState(
+                          icon: Icons.filter_list_off,
+                          title: 'No matching recordings',
+                          subtitle: 'No recorded lectures match the selected filter criteria.',
+                          buttonText: 'Reset Filters',
+                          onAction: _resetFilters,
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final item = filtered[index];
+                          return _buildRecordingCard(context, item);
+                        },
+                      ),
+              ),
+            ],
           );
         },
       ),

@@ -11,21 +11,114 @@ import '../../../../core/widgets/empty_state.dart';
 import '../controllers/learning_controller.dart';
 import '../../domain/models/learning_models.dart';
 
-class AssignmentsScreen extends ConsumerWidget {
+import '../../../../core/widgets/filter_sort_sheet.dart';
+
+class AssignmentsScreen extends ConsumerStatefulWidget {
   final bool isTeacher;
 
   const AssignmentsScreen({super.key, this.isTeacher = false});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AssignmentsScreen> createState() => _AssignmentsScreenState();
+}
+
+class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
+  String _selectedBatch = 'ALL';
+  String _selectedSubject = 'ALL';
+  String _selectedStatus = 'ALL';
+  String _selectedSort = 'due_soonest';
+
+  int get _activeCount =>
+      (_selectedBatch != 'ALL' ? 1 : 0) +
+      (_selectedSubject != 'ALL' ? 1 : 0) +
+      (_selectedStatus != 'ALL' ? 1 : 0) +
+      (_selectedSort != 'due_soonest' ? 1 : 0);
+
+  void _resetFilters() {
+    setState(() {
+      _selectedBatch = 'ALL';
+      _selectedSubject = 'ALL';
+      _selectedStatus = 'ALL';
+      _selectedSort = 'due_soonest';
+    });
+  }
+
+  Future<void> _openFilterSortSheet(List<AssignmentModel> assignments) async {
+    final batches = {'ALL', ...assignments.map((a) => a.batchName).where((b) => b != null && b.isNotEmpty).cast<String>()}.toList();
+    final subjects = {'ALL', ...assignments.map((a) => a.subject).where((s) => s != null && s.isNotEmpty).cast<String>()}.toList();
+
+    final result = await showFilterSortSheet<String>(
+      context: context,
+      title: 'Filter & Sort Assignments',
+      filters: [
+        FilterConfig<String>(
+          id: 'batch',
+          title: 'Batch',
+          options: batches.map((b) => FilterItem(value: b, label: b == 'ALL' ? 'All Batches' : b)).toList(),
+          initialValue: _selectedBatch,
+          defaultValue: 'ALL',
+        ),
+        if (subjects.length > 1)
+          FilterConfig<String>(
+            id: 'subject',
+            title: 'Subject',
+            options: subjects.map((s) => FilterItem(value: s, label: s == 'ALL' ? 'All Subjects' : s)).toList(),
+            initialValue: _selectedSubject,
+            defaultValue: 'ALL',
+          ),
+        const FilterConfig<String>(
+          id: 'status',
+          title: 'Submission Status',
+          options: [
+            FilterItem(value: 'ALL', label: 'All Statuses', icon: Icons.all_inclusive),
+            FilterItem(value: 'PENDING', label: 'Pending Submission', icon: Icons.pending_actions),
+            FilterItem(value: 'SUBMITTED', label: 'Submitted (Pending Review)', icon: Icons.upload_file),
+            FilterItem(value: 'GRADED', label: 'Graded & Reviewed', icon: Icons.check_circle_outline),
+          ],
+          initialValue: 'ALL',
+          defaultValue: 'ALL',
+        ),
+      ],
+      sort: SortConfig<String>(
+        title: 'Sort Order',
+        options: const [
+          SortOptionItem(value: 'due_soonest', label: 'Due Date: Soonest First', icon: Icons.alarm),
+          SortOptionItem(value: 'due_latest', label: 'Due Date: Latest First', icon: Icons.event_available),
+          SortOptionItem(value: 'marks_desc', label: 'Total Marks: Highest First', icon: Icons.grade),
+        ],
+        initialValue: _selectedSort,
+        defaultValue: 'due_soonest',
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedBatch = result.getFilter('batch', 'ALL');
+        _selectedSubject = result.getFilter('subject', 'ALL');
+        _selectedStatus = result.getFilter('status', 'ALL');
+        _selectedSort = result.sortValue ?? 'due_soonest';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final assignmentsAsync = ref.watch(assignmentsProvider);
     final currentUser = ref.watch(authStateProvider).user;
-    final canCreate = isTeacher || currentUser?.role == 'TEACHER' || currentUser?.role == 'ADMIN';
+    final canCreate = widget.isTeacher || currentUser?.role == 'TEACHER' || currentUser?.role == 'ADMIN';
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Assignments & Homework', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          FilterBadgeButton(
+            activeCount: _activeCount,
+            tooltip: 'Filter & Sort Assignments',
+            onPressed: () {
+              final assignments = assignmentsAsync.valueOrNull ?? [];
+              _openFilterSortSheet(assignments);
+            },
+          ),
           if (canCreate)
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
@@ -67,14 +160,73 @@ class AssignmentsScreen extends ConsumerWidget {
             );
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: assignments.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final item = assignments[index];
-              return _buildAssignmentCard(context, ref, item);
-            },
+          var filtered = assignments.where((item) {
+            if (_selectedBatch != 'ALL' && (item.batchName ?? '') != _selectedBatch) return false;
+            if (_selectedSubject != 'ALL' && (item.subject ?? '') != _selectedSubject) return false;
+            if (_selectedStatus == 'PENDING' && item.isSubmitted) return false;
+            if (_selectedStatus == 'SUBMITTED' && (!item.isSubmitted || item.isGraded)) return false;
+            if (_selectedStatus == 'GRADED' && !item.isGraded) return false;
+            return true;
+          }).toList();
+
+          if (_selectedSort == 'due_soonest') {
+            filtered.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+          } else if (_selectedSort == 'due_latest') {
+            filtered.sort((a, b) => b.dueDate.compareTo(a.dueDate));
+          } else if (_selectedSort == 'marks_desc') {
+            filtered.sort((a, b) => b.maxMarks.compareTo(a.maxMarks));
+          }
+
+          return Column(
+            children: [
+              if (_activeCount > 0)
+                ActiveFiltersBar(
+                  chips: [
+                    if (_selectedBatch != 'ALL')
+                      ActiveFilterChipData(
+                        label: 'Batch: $_selectedBatch',
+                        onRemoved: () => setState(() => _selectedBatch = 'ALL'),
+                      ),
+                    if (_selectedSubject != 'ALL')
+                      ActiveFilterChipData(
+                        label: 'Subject: $_selectedSubject',
+                        onRemoved: () => setState(() => _selectedSubject = 'ALL'),
+                      ),
+                    if (_selectedStatus != 'ALL')
+                      ActiveFilterChipData(
+                        label: 'Status: ${_selectedStatus == 'PENDING' ? 'Pending' : _selectedStatus == 'SUBMITTED' ? 'Submitted' : 'Graded'}',
+                        onRemoved: () => setState(() => _selectedStatus = 'ALL'),
+                      ),
+                    if (_selectedSort != 'due_soonest')
+                      ActiveFilterChipData(
+                        label: _selectedSort == 'due_latest' ? 'Due latest' : 'Highest marks',
+                        onRemoved: () => setState(() => _selectedSort = 'due_soonest'),
+                      ),
+                  ],
+                  onClearAll: _resetFilters,
+                ),
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(
+                        child: EmptyState(
+                          icon: Icons.filter_list_off,
+                          title: 'No matching assignments',
+                          subtitle: 'No assignments match the selected filter criteria.',
+                          buttonText: 'Reset Filters',
+                          onAction: _resetFilters,
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final item = filtered[index];
+                          return _buildAssignmentCard(context, ref, item);
+                        },
+                      ),
+              ),
+            ],
           );
         },
       ),
@@ -329,7 +481,7 @@ class AssignmentsScreen extends ConsumerWidget {
               ],
 
               // Actions
-              if (!isTeacher && !item.isSubmitted) ...[
+              if (!widget.isTeacher && !item.isSubmitted) ...[
                 SizedBox(
                   width: double.infinity,
                   height: 48,

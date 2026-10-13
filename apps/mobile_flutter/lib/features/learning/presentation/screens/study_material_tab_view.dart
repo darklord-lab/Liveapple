@@ -8,6 +8,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../controllers/study_material_controller.dart';
 import '../../domain/models/study_material_model.dart';
 
+import '../../../../core/widgets/filter_sort_sheet.dart';
+
 class StudyMaterialTabView extends ConsumerStatefulWidget {
   final String batchId;
   final bool isTeacher;
@@ -26,6 +28,8 @@ class StudyMaterialTabView extends ConsumerStatefulWidget {
 
 class _StudyMaterialTabViewState extends ConsumerState<StudyMaterialTabView> {
   final TextEditingController _searchController = TextEditingController();
+  String _typeFilter = 'ALL';
+  String _accessFilter = 'ALL';
 
   @override
   void initState() {
@@ -49,10 +53,81 @@ class _StudyMaterialTabViewState extends ConsumerState<StudyMaterialTabView> {
     super.dispose();
   }
 
+  int _getActiveFilterCount(String sortOption) {
+    var count = 0;
+    if (_typeFilter != 'ALL') count++;
+    if (_accessFilter != 'ALL') count++;
+    if (sortOption != 'newest') count++;
+    return count;
+  }
+
+  void _resetFilters(StudyMaterialNotifier notifier) {
+    setState(() {
+      _typeFilter = 'ALL';
+      _accessFilter = 'ALL';
+    });
+    notifier.setSortOption('newest');
+  }
+
+  Future<void> _openFilterSortSheet(StudyMaterialState state, StudyMaterialNotifier notifier) async {
+    final result = await showFilterSortSheet<String>(
+      context: context,
+      title: 'Filter & Sort Material',
+      filters: [
+        FilterConfig<String>(
+          id: 'type',
+          title: 'Resource Type',
+          options: const [
+            FilterItem(value: 'ALL', label: 'All Resources', icon: Icons.all_inclusive),
+            FilterItem(value: 'DOCS', label: 'Documents (PDF/Doc)', icon: Icons.picture_as_pdf),
+            FilterItem(value: 'VIDEOS_LINKS', label: 'Videos & Web Links', icon: Icons.play_circle_outline),
+            FilterItem(value: 'IMAGES', label: 'Images / Infographics', icon: Icons.image_outlined),
+          ],
+          initialValue: _typeFilter,
+          defaultValue: 'ALL',
+        ),
+        FilterConfig<String>(
+          id: 'access',
+          title: 'Access Level',
+          options: const [
+            FilterItem(value: 'ALL', label: 'All Access', icon: Icons.lock_open),
+            FilterItem(value: 'FREE_ONLY', label: 'Free Preview Only', icon: Icons.check_circle_outline),
+            FilterItem(value: 'PAID_ONLY', label: 'Batch Enrolled Only', icon: Icons.lock_outline),
+          ],
+          initialValue: _accessFilter,
+          defaultValue: 'ALL',
+        ),
+      ],
+      sort: SortConfig<String>(
+        title: 'Sort Order',
+        options: const [
+          SortOptionItem(value: 'newest', label: 'Newest First', icon: Icons.schedule),
+          SortOptionItem(value: 'oldest', label: 'Oldest First', icon: Icons.history),
+          SortOptionItem(value: 'title_asc', label: 'Title: A to Z', icon: Icons.sort_by_alpha),
+          SortOptionItem(value: 'title_desc', label: 'Title: Z to A', icon: Icons.sort_by_alpha),
+        ],
+        initialValue: state.sortOption,
+        defaultValue: 'newest',
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _typeFilter = result.getFilter('type', 'ALL');
+        _accessFilter = result.getFilter('access', 'ALL');
+      });
+      final selectedSort = result.sortValue ?? 'newest';
+      if (selectedSort != state.sortOption) {
+        notifier.setSortOption(selectedSort);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(studyMaterialProvider);
     final notifier = ref.read(studyMaterialProvider.notifier);
+    final activeCount = _getActiveFilterCount(state.sortOption);
 
     return Column(
       children: [
@@ -92,17 +167,11 @@ class _StudyMaterialTabViewState extends ConsumerState<StudyMaterialTabView> {
                 ),
               ),
               const SizedBox(width: 8),
-              // Sort Popup
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.sort, color: AppColors.skyBlue),
-                tooltip: 'Sort materials',
-                onSelected: (sort) => notifier.setSortOption(sort),
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'newest', child: Text('Newest First')),
-                  const PopupMenuItem(value: 'oldest', child: Text('Oldest First')),
-                  const PopupMenuItem(value: 'title_asc', child: Text('Name (A-Z)')),
-                  const PopupMenuItem(value: 'title_desc', child: Text('Name (Z-A)')),
-                ],
+              // Filter & Sort Button with Badge
+              FilterBadgeButton(
+                activeCount: activeCount,
+                tooltip: 'Filter & Sort Material',
+                onPressed: () => _openFilterSortSheet(state, notifier),
               ),
               if (widget.isTeacher) ...[
                 const SizedBox(width: 4),
@@ -120,6 +189,37 @@ class _StudyMaterialTabViewState extends ConsumerState<StudyMaterialTabView> {
             ],
           ),
         ),
+
+        // Active Filters Bar
+        if (activeCount > 0)
+          ActiveFiltersBar(
+            chips: [
+              if (_typeFilter != 'ALL')
+                ActiveFilterChipData(
+                  label: _typeFilter == 'DOCS'
+                      ? 'Type: Documents'
+                      : _typeFilter == 'VIDEOS_LINKS'
+                          ? 'Type: Videos & Links'
+                          : 'Type: Images',
+                  onRemoved: () => setState(() => _typeFilter = 'ALL'),
+                ),
+              if (_accessFilter != 'ALL')
+                ActiveFilterChipData(
+                  label: _accessFilter == 'FREE_ONLY' ? 'Free Preview' : 'Batch Enrolled',
+                  onRemoved: () => setState(() => _accessFilter = 'ALL'),
+                ),
+              if (state.sortOption != 'newest')
+                ActiveFilterChipData(
+                  label: state.sortOption == 'oldest'
+                      ? 'Oldest first'
+                      : state.sortOption == 'title_asc'
+                          ? 'A-Z'
+                          : 'Z-A',
+                  onRemoved: () => notifier.setSortOption('newest'),
+                ),
+            ],
+            onClearAll: () => _resetFilters(notifier),
+          ),
 
         // 2. Breadcrumbs Navigation
         if (state.folderPath.isNotEmpty)
@@ -220,14 +320,60 @@ class _StudyMaterialTabViewState extends ConsumerState<StudyMaterialTabView> {
                           ],
 
                           // Materials Section
-                          if (state.materials.isNotEmpty) ...[
-                            Text(
-                              'FILES & RESOURCES (${state.materials.length})',
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 1),
-                            ),
-                            const SizedBox(height: 8),
-                            ...state.materials.map((mat) => _buildMaterialTile(mat, notifier)),
-                          ],
+                          Builder(
+                            builder: (context) {
+                              final filteredMaterials = state.materials.where((m) {
+                                if (_typeFilter == 'DOCS' && m.kind != 'PDF' && m.kind != 'DOC') return false;
+                                if (_typeFilter == 'VIDEOS_LINKS' && m.kind != 'VIDEO_LINK' && m.kind != 'LINK') return false;
+                                if (_typeFilter == 'IMAGES' && m.kind != 'IMAGE') return false;
+                                if (_accessFilter == 'FREE_ONLY' && !m.isFree) return false;
+                                if (_accessFilter == 'PAID_ONLY' && m.isFree) return false;
+                                return true;
+                              }).toList();
+
+                              if (filteredMaterials.isNotEmpty) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'FILES & RESOURCES (${filteredMaterials.length})',
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 1),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ...filteredMaterials.map((mat) => _buildMaterialTile(mat, notifier)),
+                                  ],
+                                );
+                              }
+
+                              if (state.materials.isNotEmpty && filteredMaterials.isEmpty) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 36),
+                                  child: Column(
+                                    children: [
+                                      const Icon(Icons.filter_list_off, size: 48, color: AppColors.slate400),
+                                      const SizedBox(height: 10),
+                                      const Text(
+                                        'No matching materials',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textLight),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'No resources match your active filter criteria.',
+                                        style: TextStyle(fontSize: 12, color: AppColors.slate500),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      TextButton(
+                                        onPressed: () => _resetFilters(notifier),
+                                        child: const Text('Reset Filters'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+
+                              return const SizedBox.shrink();
+                            },
+                          ),
 
                           // Empty State
                           if (state.folders.isEmpty && state.materials.isEmpty)
