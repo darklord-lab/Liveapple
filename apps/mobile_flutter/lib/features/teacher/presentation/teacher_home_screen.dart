@@ -1429,22 +1429,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
   }
 
   void _showHelpDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Faculty Help & Guide'),
-        content: const Text(
-          '1. Home: View active live sessions and start teaching.\n'
-          '2. Timetable: Add recurring slots. Conflict detection prevents overlapping sessions.\n'
-          '3. Batches: Create batch cohorts, manage enrolled students, and share unique join codes.\n'
-          '4. Live Classroom: Full whiteboard, student audio/video feeds, and interactive in-class chat.',
-          style: TextStyle(fontSize: 13, height: 1.4),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Got it')),
-        ],
-      ),
-    );
+    context.push('/help?role=TEACHER');
   }
 
   void _showRateAppDialog() {

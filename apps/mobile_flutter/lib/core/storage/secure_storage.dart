@@ -48,6 +48,15 @@ class SecureStorageService {
     await _storage.delete(key: _keyBaseUrl);
   }
 
+  Future<bool> hasCompletedWalkthrough(String role) async {
+    final val = await _storage.read(key: 'classora_walkthrough_completed_$role');
+    return val == 'true';
+  }
+
+  Future<void> setCompletedWalkthrough(String role) async {
+    await _storage.write(key: 'classora_walkthrough_completed_$role', value: 'true');
+  }
+
   Future<void> clearAll() async {
     await _storage.delete(key: _keyAccessToken);
     await _storage.delete(key: _keyRefreshToken);

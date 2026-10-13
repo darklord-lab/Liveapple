@@ -1804,22 +1804,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
   }
 
   void _showHelpDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('How to use Classora'),
-        content: const Text(
-          '1. Home: View live classes and quick access to study modules.\n'
-          '2. Schedule: Check timetable and upcoming sessions.\n'
-          '3. Learn: Access notes, homework, CBT quizzes, and recordings.\n'
-          '4. Join Class: Tap Join to enter the pre-join lobby and configure your mic & camera.',
-          style: TextStyle(fontSize: 13, height: 1.4),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Got it')),
-        ],
-      ),
-    );
+    context.push('/help?role=STUDENT');
   }
 
   void _showPrivacyDialog() {

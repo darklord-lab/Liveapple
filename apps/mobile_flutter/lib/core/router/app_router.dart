@@ -16,6 +16,7 @@ import '../../features/learning/presentation/screens/cbt_tests_screen.dart';
 import '../../features/learning/presentation/screens/fees_screen.dart';
 import '../../features/learning/presentation/screens/attendance_screen.dart';
 import '../../features/auth/presentation/edit_profile_screen.dart';
+import '../../features/help/presentation/help_walkthrough_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
@@ -74,6 +75,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/edit-profile',
         builder: (context, state) => EditProfileScreen(user: authState.user!),
+      ),
+      GoRoute(
+        path: '/help',
+        builder: (context, state) => HelpWalkthroughScreen(
+          initialRole: state.uri.queryParameters['role'] ?? authState.user?.role ?? 'STUDENT',
+          user: authState.user,
+          openTourImmediately: state.uri.queryParameters['tour'] == 'true',
+        ),
       ),
     ],
     redirect: (BuildContext context, GoRouterState state) {

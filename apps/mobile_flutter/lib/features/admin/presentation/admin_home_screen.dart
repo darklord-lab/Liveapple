@@ -285,6 +285,14 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
                     },
                   ),
                   _buildDrawerItem(
+                    icon: Icons.help_outline,
+                    label: 'Help & Administrator Guide',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/help?role=ADMIN');
+                    },
+                  ),
+                  _buildDrawerItem(
                     icon: Icons.logout,
                     label: 'Sign Out',
                     textColor: AppColors.liveRed,
@@ -1089,6 +1097,12 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
             title: 'Study Materials & Assignments',
             subtitle: 'Manage curricular documents and student homework',
             onTap: () => context.push('/assignments'),
+          ),
+          _buildModuleTile(
+            icon: Icons.help_outline_rounded,
+            title: 'Help & Administrator Guide',
+            subtitle: 'Onboarding walkthrough, security and admin FAQs',
+            onTap: () => context.push('/help?role=ADMIN'),
           ),
 
           const SizedBox(height: 20),
