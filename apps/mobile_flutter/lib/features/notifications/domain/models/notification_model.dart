@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class NotificationModel {
   final String id;
   final String type;
@@ -48,15 +50,27 @@ class NotificationModel {
       }
     }
 
-    final payloadMap = json['payload'] is Map<String, dynamic>
-        ? json['payload'] as Map<String, dynamic>
-        : <String, dynamic>{};
+    Map<String, dynamic> parsePayload(dynamic raw) {
+      if (raw == null) return <String, dynamic>{};
+      if (raw is Map<String, dynamic>) return raw;
+      if (raw is Map) return Map<String, dynamic>.from(raw);
+      if (raw is String) {
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map<String, dynamic>) return decoded;
+          if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        } catch (_) {}
+      }
+      return <String, dynamic>{};
+    }
+
+    final payloadMap = parsePayload(json['payload']);
 
     return NotificationModel(
       id: json['id']?.toString() ?? '',
       type: json['type']?.toString() ?? 'SYSTEM',
-      title: json['title']?.toString() ?? 'Notification',
-      body: json['body']?.toString() ?? '',
+      title: json['title']?.toString() ?? payloadMap['title']?.toString() ?? 'Notification',
+      body: json['body']?.toString() ?? payloadMap['body']?.toString() ?? '',
       deepLink: json['deepLink']?.toString() ?? payloadMap['deepLink']?.toString(),
       classId: json['classId']?.toString() ?? payloadMap['classId']?.toString(),
       batchId: json['batchId']?.toString() ?? payloadMap['batchId']?.toString(),

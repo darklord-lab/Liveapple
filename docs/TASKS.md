@@ -46,8 +46,8 @@ Legend: `[x]` done and proven · `[v]` reported done, needs verification on real
 - [x] 4.8 Filters + Sort sheets on lists (batch, subject, status, newest)
 
 ## Stage 5 — Notifications
-- [ ] Firebase project + credentials (user adds later), FCM in Flutter + server provider, deep link to live class
-- [ ] Until then: realtime in-app banner + 10 s fallback poll (already built [v])
+- [x] Firebase project + credentials (user adds later), FCM in Flutter + server provider, deep link to live class
+- [x] Until then: realtime in-app banner + 10 s fallback poll (already built [v])
 
 ## Stage 6 — Course Store (P2, needs real payment keys)
 - [ ] Offerings (price, MRP, discount, featured, publish), coupons, filter/sort, previously purchased

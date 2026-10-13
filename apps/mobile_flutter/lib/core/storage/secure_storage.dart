@@ -16,6 +16,7 @@ class SecureStorageService {
   static const String _keyBaseUrl = 'classora_api_base_url';
   static const String _keyInstituteCode = 'classora_institute_code';
   static const String _keyInstituteBranding = 'classora_cached_branding';
+  static const String _keyFcmToken = 'classora_fcm_token';
 
   Future<void> saveTokens({required String accessToken, required String refreshToken}) async {
     await _storage.write(key: _keyAccessToken, value: accessToken);
@@ -80,9 +81,22 @@ class SecureStorageService {
     await _storage.write(key: 'classora_walkthrough_completed_$role', value: 'true');
   }
 
+  Future<void> saveFcmToken(String token) async {
+    await _storage.write(key: _keyFcmToken, value: token);
+  }
+
+  Future<String?> getFcmToken() async {
+    return _storage.read(key: _keyFcmToken);
+  }
+
+  Future<void> deleteFcmToken() async {
+    await _storage.delete(key: _keyFcmToken);
+  }
+
   Future<void> clearAll() async {
     await _storage.delete(key: _keyAccessToken);
     await _storage.delete(key: _keyRefreshToken);
     await _storage.delete(key: _keyUser);
+    await _storage.delete(key: _keyFcmToken);
   }
 }

@@ -1,9 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/storage/secure_storage.dart';
+import '../../../core/network/endpoints.dart';
+import '../../../core/services/push_notification_service.dart';
 import '../../../core/widgets/color_tile.dart';
 import '../../../core/widgets/confirm_dialog.dart';
 import '../../../core/widgets/empty_state.dart';
@@ -17,6 +22,7 @@ import '../../batch/presentation/create_batch_dialog.dart';
 import '../../liveclass/domain/live_class_model.dart';
 import '../../liveclass/presentation/live_class_controller.dart';
 import '../../notifications/presentation/widgets/notification_bell_button.dart';
+import '../../notifications/presentation/controllers/notification_controller.dart';
 import '../../timetable/domain/timetable_model.dart';
 import '../../timetable/presentation/add_timetable_slot_dialog.dart';
 import '../../timetable/presentation/timetable_controller.dart';
@@ -41,17 +47,94 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
   bool _classReminders = true;
   bool _liveAlerts = true;
 
+  Timer? _fallbackPollingTimer;
+  io.Socket? _globalSocket;
+
   @override
   void initState() {
     super.initState();
     _classReminders = widget.user.remindersEnabled;
     _liveAlerts = widget.user.liveAlertsEnabled;
+
+    // 10-second fallback polling for live classes and notifications
+    _fallbackPollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted) {
+        ref.read(liveClassProvider.notifier).loadClasses();
+        ref.read(notificationControllerProvider.notifier).fetchNotifications(showLoading: false);
+      }
+    });
+
     Future.microtask(() {
       ref.read(batchListProvider.notifier).loadBatches();
       ref.read(timetableProvider.notifier).loadSlots();
       ref.read(liveClassProvider.notifier).loadClasses();
+      ref.read(notificationControllerProvider.notifier).fetchNotifications(showLoading: false);
       ref.read(instituteBrandingProvider.notifier).syncFromUser(widget.user);
+      _initGlobalSocket();
     });
+  }
+
+  /// Connects a background socket to receive instant 'class:live', 'class:scheduled', and 'notification:new' events.
+  Future<void> _initGlobalSocket() async {
+    try {
+      final storage = SecureStorageService();
+      final baseUrl = await storage.getBaseUrl() ?? Endpoints.defaultBaseUrl;
+      final accessToken = await storage.getAccessToken();
+      if (accessToken == null) return;
+
+      // Register device FCM token if saved
+      ref.read(pushNotificationServiceProvider).registerTokenIfSaved();
+
+      final uri = Uri.parse(baseUrl);
+      final socketHost = '${uri.scheme}://${uri.host}:${uri.port}';
+
+      _globalSocket = io.io(
+        socketHost,
+        io.OptionBuilder()
+            .setTransports(['websocket'])
+            .setAuth({'token': accessToken})
+            .enableAutoConnect()
+            .build(),
+      );
+
+      _globalSocket?.on('class:live', (data) {
+        debugPrint('[TEACHER-SOCKET] class:live received. Reloading classes...');
+        if (mounted) {
+          ref.read(liveClassProvider.notifier).loadClasses();
+        }
+      });
+
+      _globalSocket?.on('class:scheduled', (data) {
+        if (mounted) {
+          ref.read(liveClassProvider.notifier).loadClasses();
+        }
+      });
+
+      _globalSocket?.on('notification:new', (data) {
+        debugPrint('[TEACHER-SOCKET] notification:new received: $data');
+        if (mounted && data != null) {
+          final dataMap = data is Map<String, dynamic>
+              ? data
+              : Map<String, dynamic>.from(data as Map);
+          ref.read(pushNotificationServiceProvider).handleIncomingNotification(context, dataMap);
+        }
+      });
+
+      _globalSocket?.on('connect_error', (err) {
+        debugPrint('[TEACHER-SOCKET] connect error: $err');
+      });
+    } catch (e) {
+      debugPrint('[TEACHER-SOCKET] setup error: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _fallbackPollingTimer?.cancel();
+    _globalSocket?.disconnect();
+    _globalSocket?.dispose();
+    _globalSocket = null;
+    super.dispose();
   }
 
   Future<void> _syncNotificationPrefs() async {

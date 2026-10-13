@@ -17,6 +17,8 @@ import '../../timetable/domain/timetable_model.dart';
 import '../../liveclass/presentation/live_class_controller.dart';
 import '../../liveclass/domain/live_class_model.dart';
 import '../../notifications/presentation/widgets/notification_bell_button.dart';
+import '../../notifications/presentation/controllers/notification_controller.dart';
+import '../../../core/services/push_notification_service.dart';
 import '../../learning/presentation/screens/recordings_screen.dart';
 import '../../learning/presentation/screens/assignments_screen.dart';
 import '../../learning/presentation/screens/cbt_tests_screen.dart';
@@ -64,10 +66,11 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
     _liveAlerts = widget.user.liveAlertsEnabled;
     _homeworkAlerts = widget.user.homeworkEnabled;
 
-    // 10-second fallback polling for live and upcoming classes (Phase C - C6)
+    // 10-second fallback polling for live classes and notifications
     _fallbackPollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (mounted) {
         ref.read(liveClassProvider.notifier).loadClasses();
+        ref.read(notificationControllerProvider.notifier).fetchNotifications(showLoading: false);
       }
     });
 
@@ -78,6 +81,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
       ref.read(instituteLinksProvider.notifier).loadLinks();
       ref.read(testimonialsProvider.notifier).loadTestimonials();
       ref.read(instituteBrandingProvider.notifier).syncFromUser(widget.user);
+      ref.read(notificationControllerProvider.notifier).fetchNotifications(showLoading: false);
       _initGlobalSocket();
     });
   }
@@ -94,15 +98,17 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
     );
   }
 
-  /// Connects a background socket to receive instant 'class:live' push events.
-  /// When a teacher starts a class, this fires immediately and refreshes the class list,
-  /// so the student sees the LIVE NOW banner without waiting for the 10s polling cycle.
+  /// Connects a background socket to receive instant 'class:live' and 'notification:new' push events.
+  /// When a teacher starts a class or a notification is dispatched, this fires immediately.
   Future<void> _initGlobalSocket() async {
     try {
       final storage = SecureStorageService();
       final baseUrl = await storage.getBaseUrl() ?? Endpoints.defaultBaseUrl;
       final accessToken = await storage.getAccessToken();
       if (accessToken == null) return;
+
+      // Register device FCM token if saved
+      ref.read(pushNotificationServiceProvider).registerTokenIfSaved();
 
       final uri = Uri.parse(baseUrl);
       final socketHost = '${uri.scheme}://${uri.host}:${uri.port}';
@@ -126,6 +132,16 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
       _globalSocket?.on('class:scheduled', (data) {
         if (mounted) {
           ref.read(liveClassProvider.notifier).loadClasses();
+        }
+      });
+
+      _globalSocket?.on('notification:new', (data) {
+        debugPrint('[HOME-SOCKET] notification:new received: $data');
+        if (mounted && data != null) {
+          final dataMap = data is Map<String, dynamic>
+              ? data
+              : Map<String, dynamic>.from(data as Map);
+          ref.read(pushNotificationServiceProvider).handleIncomingNotification(context, dataMap);
         }
       });
 
