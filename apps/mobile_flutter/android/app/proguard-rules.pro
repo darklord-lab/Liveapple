@@ -36,7 +36,9 @@
 # Firebase & Google Play Services
 -keep class com.google.firebase.** { *; }
 -dontwarn com.google.firebase.**
+-dontwarn com.google.android.play.core.**
 
 # Android Architecture Components
 -keepattributes *Annotation*
 -keepattributes SourceFile,LineNumberTable
+
