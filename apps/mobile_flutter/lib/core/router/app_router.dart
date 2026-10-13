@@ -18,6 +18,7 @@ import '../../features/learning/presentation/screens/attendance_screen.dart';
 import '../../features/auth/presentation/edit_profile_screen.dart';
 import '../../features/help/presentation/help_walkthrough_screen.dart';
 import '../../features/institute/presentation/manage_institute_content_screen.dart';
+import '../../features/learning/presentation/screens/test_result_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
@@ -89,6 +90,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/institute-content',
         builder: (context, state) => const ManageInstituteContentScreen(),
       ),
+      GoRoute(
+        path: '/test-result',
+        builder: (context, state) {
+          final attemptId = state.uri.queryParameters['attemptId'] ?? '';
+          final code = state.uri.queryParameters['code'];
+          return TestResultScreen(attemptId: attemptId, code: code);
+        },
+      ),
     ],
     redirect: (BuildContext context, GoRouterState state) {
       final status = authState.status;
@@ -99,9 +108,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         return location == '/splash' ? null : '/splash';
       }
 
-      // 2. Unauthenticated -> Go to login or accept-invite
+      // 2. Unauthenticated -> Go to login, accept-invite, or test-result
       if (status == AuthStatus.unauthenticated || status == AuthStatus.error) {
-        if (location == '/login' || location == '/accept-invite') {
+        if (location == '/login' || location == '/accept-invite' || location == '/test-result') {
           return null;
         }
         return '/login';

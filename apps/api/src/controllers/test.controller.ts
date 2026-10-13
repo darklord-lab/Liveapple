@@ -131,4 +131,18 @@ export class TestController {
       next(err);
     }
   }
+
+  static async getSharedScore(req: Request, res: Response, next: NextFunction) {
+    try {
+      const attemptId = req.params.attemptId;
+      const shareData = await TestService.getSharedTestScore(attemptId);
+
+      res.status(200).json({
+        status: 'success',
+        data: shareData,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
 }

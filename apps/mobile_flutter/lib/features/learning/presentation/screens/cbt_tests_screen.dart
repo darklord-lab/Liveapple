@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/empty_state.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../core/network/endpoints.dart';
 import '../controllers/learning_controller.dart';
 import '../../domain/models/learning_models.dart';
+import '../../domain/models/test_share_model.dart';
+import '../widgets/test_score_share_card.dart';
 
 class CbtTestsScreen extends ConsumerWidget {
   const CbtTestsScreen({super.key});
@@ -144,6 +148,17 @@ class CbtTestsScreen extends ConsumerWidget {
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   ),
+                )
+              else
+                OutlinedButton.icon(
+                  key: Key('share_test_${item.id}'),
+                  onPressed: () => _openShareCard(context, ref, item),
+                  icon: const Icon(Icons.share, size: 14, color: AppColors.skyBlue),
+                  label: const Text('Share Score', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.skyBlue)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.skyBlue),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  ),
                 ),
             ],
           ),
@@ -158,6 +173,53 @@ class CbtTestsScreen extends ConsumerWidget {
       barrierDismissible: false,
       builder: (ctx) => _CbtQuizRunnerDialog(testId: testId),
     );
+  }
+
+  void _openShareCard(BuildContext context, WidgetRef ref, CbtTestModel item) async {
+    final client = ref.read(apiClientProvider);
+    String? attemptId = item.myAttemptId;
+
+    if (attemptId == null || attemptId.isEmpty) {
+      try {
+        final repo = ref.read(learningRepositoryProvider);
+        final fullTest = await repo.getTestDetails(item.id);
+        attemptId = fullTest.myAttemptId;
+      } catch (_) {}
+    }
+
+    if (attemptId != null && attemptId.isNotEmpty) {
+      try {
+        final res = await client.dio.get(Endpoints.testShare(attemptId));
+        final data = res.data as Map<String, dynamic>;
+        final payload = data['data'] as Map<String, dynamic>? ?? data;
+        final share = TestShareModel.fromJson(payload);
+        if (context.mounted) {
+          TestScoreShareCard.show(context, share);
+        }
+        return;
+      } catch (_) {}
+    }
+
+    if (context.mounted) {
+      final fallbackShare = TestShareModel(
+        attemptId: attemptId ?? item.id,
+        testId: item.id,
+        testTitle: item.title,
+        durationMin: item.durationMin,
+        batchName: item.batchName,
+        subject: item.subject,
+        studentName: 'Verified Student',
+        score: item.myScore ?? 0,
+        totalMarks: item.totalMarks,
+        percentage: item.totalMarks > 0 ? ((item.myScore ?? 0) * 100 ~/ item.totalMarks) : 0,
+        status: 'EVALUATED',
+        instituteName: 'Classora Academy',
+        instituteCode: 'APEX01',
+        deepLink: 'classora://test-result?attemptId=${attemptId ?? item.id}&code=APEX01',
+        webLink: 'https://classora.app/test-result?attemptId=${attemptId ?? item.id}&code=APEX01',
+      );
+      TestScoreShareCard.show(context, fallbackShare);
+    }
   }
 }
 
@@ -200,26 +262,45 @@ class _CbtQuizRunnerDialogState extends ConsumerState<_CbtQuizRunnerDialog> {
 
     if (mounted) {
       Navigator.pop(context);
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF0F172A),
-          title: const Text('Test Completed! 🎉', style: TextStyle(color: Colors.white)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Your Score: ${result['score']} / ${result['totalMarks']}',
-                  style: const TextStyle(color: Color(0xFF10B981), fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              Text('Percentage: ${result['percentage']}%', style: const TextStyle(color: Colors.white70)),
-            ],
-          ),
-          actions: [
-            ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-          ],
-        ),
-      );
+
+      final attemptId = result['attemptId']?.toString();
+      TestShareModel? shareModel;
+      if (attemptId != null && attemptId.isNotEmpty) {
+        try {
+          final client = ref.read(apiClientProvider);
+          final res = await client.dio.get(Endpoints.testShare(attemptId));
+          final data = res.data as Map<String, dynamic>;
+          final payload = data['data'] as Map<String, dynamic>? ?? data;
+          shareModel = TestShareModel.fromJson(payload);
+        } catch (_) {}
+      }
+
+      if (shareModel == null) {
+        final score = (result['score'] as num?)?.toInt() ?? 0;
+        final totalMarks = (result['totalMarks'] as num?)?.toInt() ?? (_test?.totalMarks ?? 100);
+        final pct = (result['percentage'] as num?)?.toInt() ?? (totalMarks > 0 ? (score * 100 ~/ totalMarks) : 0);
+        shareModel = TestShareModel(
+          attemptId: attemptId ?? '',
+          testId: widget.testId,
+          testTitle: _test?.title ?? 'CBT Test',
+          durationMin: _test?.durationMin ?? 30,
+          batchName: _test?.batchName,
+          subject: _test?.subject,
+          studentName: 'Verified Student',
+          score: score,
+          totalMarks: totalMarks,
+          percentage: pct,
+          status: result['status']?.toString() ?? 'EVALUATED',
+          instituteName: 'Classora Academy',
+          instituteCode: 'APEX01',
+          deepLink: 'classora://test-result?attemptId=${attemptId ?? ''}&code=APEX01',
+          webLink: 'https://classora.app/test-result?attemptId=${attemptId ?? ''}&code=APEX01',
+        );
+      }
+
+      if (mounted) {
+        TestScoreShareCard.show(context, shareModel);
+      }
     }
   }
 

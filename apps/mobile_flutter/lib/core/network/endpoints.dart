@@ -84,6 +84,9 @@ class Endpoints {
   static String instituteLookup(String code) => '/v1/institute/lookup/$code';
   static const String instituteBranding = '/v1/institute/branding';
 
+  // Phase 4.6 Share Score & Deep Link
+  static String testShare(String attemptId) => '/v1/tests/share/$attemptId';
+
   // Health
   static const String health = '/health';
 }
