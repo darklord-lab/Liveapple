@@ -87,6 +87,17 @@ class Endpoints {
   // Phase 4.6 Share Score & Deep Link
   static String testShare(String attemptId) => '/v1/tests/share/$attemptId';
 
+  // Phase 6 Course Store (P2)
+  static const String storeOfferings = '/v1/store/offerings';
+  static String storeOffering(String id) => '/v1/store/offerings/$id';
+  static const String storeCoupons = '/v1/store/coupons';
+  static const String storeValidateCoupon = '/v1/store/coupons/validate';
+  static const String storeCheckout = '/v1/store/checkout';
+  static const String storeVerifyPayment = '/v1/store/verify-payment';
+  static const String storePurchases = '/v1/store/purchases';
+  static String storeInvoice(String purchaseId) => '/v1/store/purchases/$purchaseId/invoice';
+  static String storeRefund(String purchaseId) => '/v1/store/purchases/$purchaseId/refund';
+
   // Health
   static const String health = '/health';
 }

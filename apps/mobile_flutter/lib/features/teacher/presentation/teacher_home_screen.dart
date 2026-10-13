@@ -508,6 +508,14 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                       context.push('/attendance');
                     },
                   ),
+                  _buildDrawerItem(
+                    icon: Icons.storefront_outlined,
+                    label: 'Course Store',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/store');
+                    },
+                  ),
                   const Divider(color: AppColors.borderLight, height: 16),
                   _buildDrawerItem(
                     icon: Icons.person_outline,

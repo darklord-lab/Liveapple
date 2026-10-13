@@ -16,6 +16,9 @@ const envSchema = z.object({
   LIVEKIT_URL: z.string().default('http://localhost:7880'),
   LIVEKIT_API_KEY: z.string().default('devkey'),
   LIVEKIT_API_SECRET: z.string().default('secret'),
+  RAZORPAY_KEY_ID: z.string().optional().default('rzp_test_placeholder'),
+  RAZORPAY_KEY_SECRET: z.string().optional().default('rzp_secret_placeholder'),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional().default('rzp_webhook_secret_placeholder'),
   // Public URL of the deployed server (used for self-ping keep-alive on Render)
   APP_URL: z.string().optional(),
 });

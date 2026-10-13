@@ -19,6 +19,7 @@ import '../../features/auth/presentation/edit_profile_screen.dart';
 import '../../features/help/presentation/help_walkthrough_screen.dart';
 import '../../features/institute/presentation/manage_institute_content_screen.dart';
 import '../../features/learning/presentation/screens/test_result_screen.dart';
+import '../../features/store/presentation/screens/course_store_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
@@ -97,6 +98,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           final code = state.uri.queryParameters['code'];
           return TestResultScreen(attemptId: attemptId, code: code);
         },
+      ),
+      GoRoute(
+        path: '/store',
+        builder: (context, state) => const CourseStoreScreen(),
       ),
     ],
     redirect: (BuildContext context, GoRouterState state) {

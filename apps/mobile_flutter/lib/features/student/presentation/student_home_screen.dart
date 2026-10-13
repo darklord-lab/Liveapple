@@ -629,6 +629,14 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                       context.push('/fees');
                     },
                   ),
+                  _buildDrawerItem(
+                    icon: Icons.storefront_outlined,
+                    label: 'Course Store',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/store');
+                    },
+                  ),
                   const Divider(color: AppColors.borderLight, height: 16),
                   _buildDrawerItem(
                     icon: Icons.person_outline,
@@ -1024,6 +1032,9 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
 
             const SizedBox(height: 14),
 
+            // Course Store Promo Banner (Stage 6)
+            _buildStorePromoBanner(),
+
             // 5. Student Testimonials Section (DESIGN.md)
             _buildTestimonialsSection(testimonialsState.testimonials),
 
@@ -1033,6 +1044,73 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
             const SizedBox(height: 20),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStorePromoBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.skyBlue.withValues(alpha: 0.12),
+            const Color(0xFF6366F1).withValues(alpha: 0.08),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.skyBlue,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Course Store & Test Series',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: AppColors.textLight,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Explore new batches, test series & apply coupons',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.slate500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => context.push('/store'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.skyBlue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: const Size(0, 36),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Explore', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

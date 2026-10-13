@@ -50,9 +50,9 @@ Legend: `[x]` done and proven · `[v]` reported done, needs verification on real
 - [x] Until then: realtime in-app banner + 10 s fallback poll (already built [v])
 
 ## Stage 6 — Course Store (P2, needs real payment keys)
-- [ ] Offerings (price, MRP, discount, featured, publish), coupons, filter/sort, previously purchased
-- [ ] Razorpay checkout + webhook signature verification, auto-enroll after payment
-- [ ] Refund/invoice basics
+- [x] Offerings (price, MRP, discount, featured, publish), coupons, filter/sort, previously purchased
+- [x] Razorpay checkout + webhook signature verification, auto-enroll after payment
+- [x] Refund/invoice basics
 
 ## Stage 7 — Hardening & Release
 - [ ] Security checklist (RULES.md), upload fuzz tests, rate-limit review

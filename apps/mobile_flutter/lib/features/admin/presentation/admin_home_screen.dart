@@ -399,6 +399,14 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
                       context.push('/assignments');
                     },
                   ),
+                  _buildDrawerItem(
+                    icon: Icons.storefront_outlined,
+                    label: 'Course Store & Offerings',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/store');
+                    },
+                  ),
                   const Divider(color: AppColors.borderLight, height: 16),
                   _buildDrawerItem(
                     icon: Icons.laptop_mac_outlined,
