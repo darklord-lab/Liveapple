@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { InstituteContentController } from '../controllers/institute_content.controller.js';
 import { authenticate, requireRole } from '../middlewares/auth.js';
 import { tenantGuard } from '../middlewares/tenant.js';
+import { instituteCodeLimiter } from '../middlewares/rateLimiter.js';
 
 const router = Router();
 
-// Public route for first launch & code verification (no auth required)
-router.get('/lookup/:code', InstituteContentController.lookupByCode);
+// Public route for first launch & code verification (no auth required, rate limited per RULES.md F.6)
+router.get('/lookup/:code', instituteCodeLimiter, InstituteContentController.lookupByCode);
 
 // All subsequent routes require valid auth and tenant scoping
 router.use(authenticate, tenantGuard);

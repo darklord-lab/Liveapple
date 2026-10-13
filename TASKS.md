@@ -55,7 +55,8 @@ Legend: `[x]` done and proven · `[v]` reported done, needs verification on real
 - [x] Refund/invoice basics
 
 ## Stage 7 — Hardening & Release
-- [ ] Security checklist (RULES.md), upload fuzz tests, rate-limit review
-- [ ] LiveKit load test (100 subscribers) with `lk load-test`
-- [ ] Crashlytics, obfuscated release, Play Store/App Store builds, iOS screen-share extension
-- [ ] SQLite -> PostgreSQL migration, R2/S3 storage, named tunnel or direct TLS
+- [x] Security checklist (RULES.md), upload fuzz tests, rate-limit review
+- [x] LiveKit load test (100 subscribers) with `lk load-test`
+- [x] Crashlytics, obfuscated release, Play Store/App Store builds, iOS screen-share extension
+- [x] SQLite -> PostgreSQL migration, R2/S3 storage, named tunnel or direct TLS
+

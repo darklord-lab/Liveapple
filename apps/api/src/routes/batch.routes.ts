@@ -31,6 +31,7 @@ router.post('/:id/regenerate-code', requireRole(['ADMIN', 'TEACHER']), BatchCont
 
 import { MaterialController } from '../controllers/material.controller.js';
 import { upload } from './material.routes.js';
+import { uploadLimiter } from '../middlewares/rateLimiter.js';
 
 // Batch student management
 router.get('/:id/students', requireRole(['ADMIN', 'TEACHER']), BatchController.listStudents);
@@ -45,6 +46,7 @@ router.get('/:id/materials', MaterialController.getMaterials);
 router.post(
   '/:id/materials',
   requireRole(['ADMIN', 'TEACHER']),
+  uploadLimiter,
   upload.single('file'),
   MaterialController.uploadMaterial
 );
