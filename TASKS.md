@@ -36,7 +36,7 @@ Legend: `[x]` done and proven · `[v]` reported done, needs verification on real
 - [x] 3.6 Login in new style, consistency pass, overflow tests 320/360 dp
 
 ## Stage 4 — New features
-- [ ] 4.1 Study Material: folders, upload (PDF/doc/link), free flag, student view/download, storage adapter, upload security tests
+- [x] 4.1 Study Material: folders, upload (PDF/doc/link), free flag, student view/download, storage adapter, upload security tests
 - [ ] 4.2 Edit Profile (photo via camera/gallery), Settings (notification prefs, share, rate, sign out, version)
 - [ ] 4.3 Help / How to use (per-role walkthrough)
 - [ ] 4.4 Institute Links ("Connect With Us") + Testimonials (admin CRUD, student view)

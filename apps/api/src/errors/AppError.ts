@@ -12,6 +12,9 @@ export type ErrorCode =
   | 'INVITE_ALREADY_USED'
   | 'TOKEN_EXPIRED'
   | 'TOKEN_REUSED'
+  | 'INVALID_FILE_TYPE'
+  | 'FILE_TOO_LARGE'
+  | 'ENROLLMENT_REQUIRED'
   | 'INTERNAL_SERVER_ERROR';
 
 export class AppError extends Error {

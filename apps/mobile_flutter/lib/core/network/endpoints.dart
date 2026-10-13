@@ -65,6 +65,13 @@ class Endpoints {
   static const String feeDues = '/v1/fees/my-dues';
   static const String feeReports = '/v1/fees/reports';
 
+  // Phase 4.1 Study Material & Folders
+  static String batchFolders(String batchId) => '/v1/batches/$batchId/folders';
+  static String batchMaterials(String batchId) => '/v1/batches/$batchId/materials';
+  static String downloadMaterial(String materialId) => '/v1/materials/$materialId/download';
+  static String deleteMaterial(String materialId) => '/v1/materials/$materialId';
+  static String deleteFolder(String folderId) => '/v1/materials/folders/$folderId';
+
   // Health
   static const String health = '/health';
 }

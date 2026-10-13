@@ -19,6 +19,7 @@ import '../../notifications/presentation/widgets/notification_bell_button.dart';
 import '../../learning/presentation/screens/recordings_screen.dart';
 import '../../learning/presentation/screens/assignments_screen.dart';
 import '../../learning/presentation/screens/cbt_tests_screen.dart';
+import '../../learning/presentation/screens/study_material_tab_view.dart';
 import 'package:intl/intl.dart';
 import '../../../core/widgets/color_tile.dart';
 import '../../../core/widgets/status_pill.dart';
@@ -38,13 +39,9 @@ class StudentHomeScreen extends ConsumerStatefulWidget {
 class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with SingleTickerProviderStateMixin {
   int _currentBottomNavIndex = 0; // 0: Home, 1: Schedule, 2: Learn, 3: Profile
   int _learnSubTabIndex = 0; // 0: Material, 1: Recordings, 2: Assign, 3: Tests
+  String? _selectedStudyBatchId;
 
-  // Learn tab search & filters
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-  String _selectedSort = 'Newest'; // Newest, Oldest, Name A-Z
-  String? _selectedFilterType; // 'PDF', 'Video', 'Link', 'Free only'
-  final Set<String> _selectedFilterBatches = {};
+
 
   // Settings toggles (Panel 6)
   bool _classReminders = true;
@@ -121,7 +118,6 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
     _globalSocket?.disconnect();
     _globalSocket?.dispose();
     _globalSocket = null;
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -1440,497 +1436,98 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
   }
 
   Widget _buildStudyMaterialSubTab() {
-    // Material items matching reference curriculum
-    final materials = [
-      {
-        'title': 'Physics Notes',
-        'subtitle': 'Folder • Prof. Rajesh Sharma',
-        'type': 'folder',
-        'batch': 'Class 12 JEE - Physics',
-        'isFree': false,
-        'size': '',
-      },
-      {
-        'title': 'Kinematics Formula Sheet',
-        'subtitle': 'PDF • 1.2 MB • 10 Oct',
-        'type': 'pdf',
-        'batch': 'Class 12 JEE - Physics',
-        'isFree': true,
-        'size': '1.2 MB',
-      },
-      {
-        'title': 'DPP 01 - Motion in 1D.pdf',
-        'subtitle': 'PDF • 640 KB • 9 Oct',
-        'type': 'pdf',
-        'batch': 'Class 12 JEE - Physics',
-        'isFree': false,
-        'size': '640 KB',
-      },
-      {
-        'title': 'Revision Lecture (link)',
-        'subtitle': 'Video link • Prof. Anita Verma',
-        'type': 'video',
-        'batch': 'Class 12 JEE - Maths',
-        'isFree': false,
-        'size': '',
-      },
-    ];
+    final batchState = ref.watch(batchListProvider);
+    final batches = batchState.batches;
 
-    // Filter by query and filters
-    final filtered = materials.where((m) {
-      if (_searchQuery.isNotEmpty && !m['title']!.toString().toLowerCase().contains(_searchQuery.toLowerCase())) {
-        return false;
-      }
-      if (_selectedFilterType != null) {
-        if (_selectedFilterType == 'Free only' && m['isFree'] != true) return false;
-        if (_selectedFilterType == 'PDF' && m['type'] != 'pdf') return false;
-        if (_selectedFilterType == 'Video' && m['type'] != 'video') return false;
-      }
-      if (_selectedFilterBatches.isNotEmpty && !_selectedFilterBatches.contains(m['batch'])) {
-        return false;
-      }
-      return true;
-    }).toList();
+    if (batches.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: EmptyState(
+            icon: Icons.school_outlined,
+            title: 'No Enrolled Batches',
+            subtitle: 'Join a batch using your class join code to access study materials, notes, and video lectures.',
+            buttonText: 'Join a Batch',
+            onAction: () {
+              showDialog(
+                context: context,
+                builder: (_) => const JoinBatchDialog(),
+              );
+            },
+          ),
+        ),
+      );
+    }
+
+    final selectedBatch = batches.firstWhere(
+      (b) => b.id == _selectedStudyBatchId,
+      orElse: () => batches.first,
+    );
 
     return Column(
       children: [
-        // Search & Filter Row
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.borderLight),
-                  ),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: (val) {
-                      setState(() {
-                        _searchQuery = val;
-                      });
-                    },
-                    decoration: const InputDecoration(
-                      hintText: 'Search material',
-                      hintStyle: TextStyle(color: AppColors.slate400, fontSize: 13),
-                      prefixIcon: Icon(Icons.search, color: AppColors.slate400, size: 20),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
+        if (batches.length > 1)
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Row(
+              children: [
+                const Text(
+                  'BATCH:',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.slate500, letterSpacing: 0.8),
                 ),
-              ),
-              const SizedBox(width: 10),
-              // Funnel Button opening Panel 5 Filter Sheet
-              IconButton(
-                icon: const Icon(Icons.filter_list, color: AppColors.skyBlue),
-                tooltip: 'Filters',
-                onPressed: _showFilterSheet,
-              ),
-            ],
-          ),
-        ),
-
-        // Count & Sort row
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'TOTAL (${filtered.length})',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.slate500),
-              ),
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    if (_selectedSort == 'Newest') {
-                      _selectedSort = 'Oldest';
-                    } else if (_selectedSort == 'Oldest') {
-                      _selectedSort = 'Name A-Z';
-                    } else {
-                      _selectedSort = 'Newest';
-                    }
-                  });
-                },
-                child: Row(
-                  children: [
-                    const Icon(Icons.swap_vert, size: 16, color: AppColors.slate500),
-                    const SizedBox(width: 4),
-                    Text(
-                      'SORT ($_selectedSort)',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: AppColors.slate500),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const Divider(color: AppColors.borderLight, height: 12),
-
-        // Material Items List
-        Expanded(
-          child: filtered.isEmpty
-              ? EmptyState(
-                  icon: Icons.folder_open,
-                  title: 'No study material found',
-                  subtitle: 'Try clearing your search query or adjusting your filters',
-                  buttonText: 'Clear Filters',
-                  onAction: () {
-                    setState(() {
-                      _searchController.clear();
-                      _searchQuery = '';
-                      _selectedFilterType = null;
-                      _selectedFilterBatches.clear();
-                    });
-                  },
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, idx) {
-                    final item = filtered[idx];
-                    final isFolder = item['type'] == 'folder';
-                    final isPdf = item['type'] == 'pdf';
-                    final isFree = item['isFree'] == true;
-
-                    return InkWell(
-                      onTap: () => _openStudyMaterialItem(item),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.borderLight),
-                        ),
-                        child: Row(
-                          children: [
-                            // Icon
-                            if (isFolder)
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.shade100,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.folder, color: Colors.amber, size: 22),
-                              )
-                            else if (isPdf)
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.shade100,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 22),
-                              )
-                            else
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.skyBlueLight,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.videocam, color: AppColors.skyBlue, size: 22),
-                              ),
-                            const SizedBox(width: 12),
-
-                            // Details
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          item['title'] as String,
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      if (isFree)
-                                        Container(
-                                          margin: const EdgeInsets.only(left: 6),
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.success,
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                          child: const Text('FREE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                                        ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    item['subtitle'] as String,
-                                    style: const TextStyle(fontSize: 12, color: AppColors.slate500),
-                                  ),
-                                ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: batches.map((b) {
+                        final isSel = b.id == selectedBatch.id;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(
+                              b.name,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                                color: isSel ? Colors.white : AppColors.textLight,
                               ),
                             ),
-                            const Icon(Icons.chevron_right, color: AppColors.slate400),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                            selected: isSel,
+                            selectedColor: AppColors.skyBlue,
+                            backgroundColor: AppColors.backgroundLight,
+                            onSelected: (_) {
+                              setState(() {
+                                _selectedStudyBatchId = b.id;
+                              });
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 ),
-        ),
-
-        // Hint Footer
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            'Filter by batch / subject using the funnel',
-            style: TextStyle(color: AppColors.slate400, fontSize: 11),
+              ],
+            ),
+          ),
+        Expanded(
+          child: StudyMaterialTabView(
+            batchId: selectedBatch.id,
+            isTeacher: false,
+            batchName: selectedBatch.name,
           ),
         ),
       ],
     );
   }
 
-  void _openStudyMaterialItem(Map<String, dynamic> item) {
-    final title = item['title'] as String;
-    final subtitle = item['subtitle'] as String;
-    final type = item['type'] as String;
-    final batch = item['batch'] as String;
 
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      backgroundColor: Colors.white,
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.skyBlueLight,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    type == 'folder'
-                        ? Icons.folder
-                        : type == 'pdf'
-                            ? Icons.picture_as_pdf
-                            : Icons.videocam,
-                    color: AppColors.skyBlue,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 2),
-                      Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            Text('Enrolled Batch: $batch', style: const TextStyle(fontSize: 13, color: AppColors.slate700)),
-            const SizedBox(height: 4),
-            Text('Resource Type: ${type.toUpperCase()}', style: const TextStyle(fontSize: 13, color: AppColors.slate700)),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Opening "$title"...')),
-                  );
-                },
-                icon: const Icon(Icons.open_in_new, color: Colors.white),
-                label: Text(type == 'folder' ? 'Open Folder' : 'Open Document', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.skyBlue,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  /* -------------------------------------------------------------------------- */
-  /* PANEL 5: FILTER SHEET MODAL                                                */
-  /* -------------------------------------------------------------------------- */
-  void _showFilterSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final enrolledBatches = ref.read(batchListProvider).batches;
-            final batches = enrolledBatches.isNotEmpty
-                ? enrolledBatches.map((b) => '${b.name} - ${b.subject}').toList()
-                : ['Class 12 JEE - Physics', 'Class 12 JEE - Maths', 'Class 11 NEET - Chemistry'];
-            final types = ['PDF', 'Video', 'Link', 'Free only'];
-            final sortOptions = ['Newest', 'Oldest', 'Name A-Z'];
 
-            return Container(
-              padding: const EdgeInsets.all(20),
-              height: 520,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: () => Navigator.pop(ctx),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text('FILTERS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        ],
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          setSheetState(() {
-                            _selectedFilterBatches.clear();
-                            _selectedFilterType = null;
-                            _selectedSort = 'Newest';
-                          });
-                          setState(() {});
-                        },
-                        child: const Text('CLEAR', style: TextStyle(color: AppColors.slate500, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  const Divider(),
 
-                  // Section BATCH
-                  const Text('BATCH', style: TextStyle(color: AppColors.slate500, fontSize: 11, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  ...batches.map((b) {
-                    final isChecked = _selectedFilterBatches.contains(b);
-                    return CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(b, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                      value: isChecked,
-                      activeColor: AppColors.skyBlue,
-                      onChanged: (val) {
-                        setSheetState(() {
-                          if (val == true) {
-                            _selectedFilterBatches.add(b);
-                          } else {
-                            _selectedFilterBatches.remove(b);
-                          }
-                        });
-                        setState(() {});
-                      },
-                    );
-                  }),
 
-                  const SizedBox(height: 10),
 
-                  // Section TYPE
-                  const Text('TYPE', style: TextStyle(color: AppColors.slate500, fontSize: 11, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: types.map((t) {
-                      final isSelected = _selectedFilterType == t;
-                      return ChoiceChip(
-                        label: Text(t, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : AppColors.slate700)),
-                        selected: isSelected,
-                        selectedColor: AppColors.skyBlue,
-                        backgroundColor: AppColors.slate100,
-                        onSelected: (val) {
-                          setSheetState(() {
-                            _selectedFilterType = val ? t : null;
-                          });
-                          setState(() {});
-                        },
-                      );
-                    }).toList(),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Section SORT BY
-                  const Text('SORT BY', style: TextStyle(color: AppColors.slate500, fontSize: 11, fontWeight: FontWeight.bold)),
-                  Row(
-                    children: sortOptions.map((s) {
-                      return Row(
-                        children: [
-                          Radio<String>(
-                            value: s,
-                            groupValue: _selectedSort,
-                            activeColor: AppColors.skyBlue,
-                            onChanged: (val) {
-                              setSheetState(() {
-                                _selectedSort = val!;
-                              });
-                              setState(() {});
-                            },
-                          ),
-                          Text(s, style: const TextStyle(fontSize: 12)),
-                        ],
-                      );
-                    }).toList(),
-                  ),
-
-                  const Spacer(),
-
-                  // Full-width Apply Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.skyBlue,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('APPLY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
 
   /* -------------------------------------------------------------------------- */
   /* PANEL 6: SETTINGS / PROFILE TAB                                            */

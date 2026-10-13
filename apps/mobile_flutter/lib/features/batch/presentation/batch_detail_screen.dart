@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/confirm_dialog.dart';
@@ -12,6 +11,7 @@ import '../../timetable/presentation/timetable_controller.dart';
 import '../data/batch_repository.dart';
 import '../domain/batch_model.dart';
 import 'batch_students_dialog.dart';
+import '../../learning/presentation/screens/study_material_tab_view.dart';
 
 class BatchDetailScreen extends ConsumerStatefulWidget {
   final BatchModel batch;
@@ -609,63 +609,10 @@ class _BatchDetailScreenState extends ConsumerState<BatchDetailScreen> with Sing
 
   // 3. STUDY MATERIAL TAB
   Widget _buildStudyMaterialTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.borderLight),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.tileMaterial.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.folder_open, color: AppColors.tileMaterial, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Study Material & Notes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        Text('PDF notes, assignments, and reference documents', style: TextStyle(fontSize: 11, color: AppColors.slate500)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                'Access all course documents and study materials for this cohort in the Learning hub.',
-                style: TextStyle(fontSize: 12, color: AppColors.slate500, height: 1.4),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => context.push('/assignments'),
-                  icon: const Icon(Icons.open_in_new, size: 16, color: Colors.white),
-                  label: const Text('Open Learning Hub', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.skyBlue,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+    return StudyMaterialTabView(
+      batchId: widget.batch.id,
+      isTeacher: true,
+      batchName: widget.batch.name,
     );
   }
 }

@@ -29,10 +29,24 @@ router.delete('/:id', requireRole(['ADMIN', 'TEACHER']), BatchController.deleteB
 // Regenerate join code
 router.post('/:id/regenerate-code', requireRole(['ADMIN', 'TEACHER']), BatchController.regenerateJoinCode);
 
+import { MaterialController } from '../controllers/material.controller.js';
+import { upload } from './material.routes.js';
+
 // Batch student management
 router.get('/:id/students', requireRole(['ADMIN', 'TEACHER']), BatchController.listStudents);
 router.post('/:id/students', requireRole(['ADMIN', 'TEACHER']), BatchController.addStudent);
 router.post('/:id/students/bulk', requireRole(['ADMIN', 'TEACHER']), BatchController.bulkEnroll);
 router.patch('/:id/students/:enrollmentId/status', requireRole(['ADMIN', 'TEACHER']), BatchController.updateEnrollmentStatus);
+
+// Batch Study Material & Folders
+router.get('/:id/folders', MaterialController.getFolders);
+router.post('/:id/folders', requireRole(['ADMIN', 'TEACHER']), MaterialController.createFolder);
+router.get('/:id/materials', MaterialController.getMaterials);
+router.post(
+  '/:id/materials',
+  requireRole(['ADMIN', 'TEACHER']),
+  upload.single('file'),
+  MaterialController.uploadMaterial
+);
 
 export default router;

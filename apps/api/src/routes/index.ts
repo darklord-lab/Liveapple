@@ -12,6 +12,7 @@ import attendanceRoutes from './attendance.routes.js';
 import assignmentRoutes from './assignment.routes.js';
 import testRoutes from './test.routes.js';
 import feeRoutes from './fee.routes.js';
+import materialRoutes from './material.routes.js';
 
 const router = Router();
 
@@ -37,6 +38,7 @@ router.use('/v1/attendance', attendanceRoutes);
 router.use('/v1/assignments', assignmentRoutes);
 router.use('/v1/tests', testRoutes);
 router.use('/v1/fees', feeRoutes);
+router.use('/v1/materials', materialRoutes);
 
 export default router;
 
