@@ -41,6 +41,10 @@ export interface AuthResult {
     id: string;
     name: string;
     slug: string;
+    code?: string | null;
+    logoUrl?: string | null;
+    primaryColor?: string | null;
+    tagline?: string | null;
   };
   teacher?: {
     id: string;
@@ -147,6 +151,10 @@ export class AuthService {
         id: user.institute.id,
         name: user.institute.name,
         slug: user.institute.slug,
+        code: user.institute.code,
+        logoUrl: user.institute.logoUrl,
+        primaryColor: user.institute.primaryColor,
+        tagline: user.institute.tagline,
       },
       teacher: user.creatorTeacher
         ? {
@@ -486,6 +494,10 @@ export class AuthService {
         id: user.institute.id,
         name: user.institute.name,
         slug: user.institute.slug,
+        code: user.institute.code,
+        logoUrl: user.institute.logoUrl,
+        primaryColor: user.institute.primaryColor,
+        tagline: user.institute.tagline,
       },
     };
   }

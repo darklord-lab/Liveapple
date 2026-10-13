@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
+import '../../../core/theme/app_colors.dart';
 
 class UserModel {
   final String id;
@@ -50,6 +52,12 @@ class UserModel {
   /// Effective faculty member / instructor name
   String get effectiveFacultyName =>
       teacher?.name ?? (isTeacher ? name : 'Classora Faculty');
+
+  /// Effective primary brand color
+  Color get brandColor => institute?.brandColor ?? AppColors.primary;
+
+  /// Effective institute code
+  String get effectiveInstituteCode => institute?.effectiveCode ?? 'APEX01';
 
   /// Parse notification preferences map safely
   Map<String, dynamic> get parsedNotificationPrefs {
@@ -164,20 +172,58 @@ class InstituteModel {
   final String id;
   final String name;
   final String slug;
+  final String? code;
+  final String? logoUrl;
+  final String? primaryColor;
+  final String? tagline;
   final String? plan;
 
   const InstituteModel({
     required this.id,
     required this.name,
     required this.slug,
+    this.code,
+    this.logoUrl,
+    this.primaryColor,
+    this.tagline,
     this.plan,
   });
+
+  String get effectiveCode =>
+      (code != null && code!.isNotEmpty)
+          ? code!.toUpperCase()
+          : (id.length >= 6 ? id.substring(0, 6).toUpperCase() : 'APEX01');
+
+  Color get brandColor {
+    if (primaryColor == null || primaryColor!.isEmpty) return AppColors.primary;
+    try {
+      final hex = primaryColor!.replaceAll('#', '');
+      if (hex.length == 6) {
+        return Color(int.parse('FF$hex', radix: 16));
+      } else if (hex.length == 8) {
+        return Color(int.parse(hex, radix: 16));
+      }
+    } catch (_) {}
+    return AppColors.primary;
+  }
+
+  String get initials {
+    final words = name.trim().split(RegExp(r'\s+'));
+    if (words.length >= 2) {
+      return '${words[0][0]}${words[1][0]}'.toUpperCase();
+    }
+    return name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'C';
+  }
 
   factory InstituteModel.fromJson(Map<String, dynamic> json) {
     return InstituteModel(
       id: json['id'] as String,
       name: json['name'] as String,
       slug: json['slug'] as String,
+      code: json['code'] as String?,
+      logoUrl: json['logoUrl'] as String?,
+      primaryColor: json['primaryColor'] as String?,
+      tagline: json['tagline'] as String?,
       plan: json['plan'] as String?,
     );
   }
@@ -187,6 +233,10 @@ class InstituteModel {
       'id': id,
       'name': name,
       'slug': slug,
+      if (code != null) 'code': code,
+      if (logoUrl != null) 'logoUrl': logoUrl,
+      if (primaryColor != null) 'primaryColor': primaryColor,
+      if (tagline != null) 'tagline': tagline,
       if (plan != null) 'plan': plan,
     };
   }

@@ -30,6 +30,8 @@ import '../../../core/widgets/empty_state.dart';
 import '../../institute/domain/institute_link_model.dart';
 import '../../institute/domain/testimonial_model.dart';
 import '../../institute/presentation/institute_content_controller.dart';
+import '../../institute/presentation/institute_branding_controller.dart';
+import '../../institute/presentation/institute_code_dialog.dart';
 
 class StudentHomeScreen extends ConsumerStatefulWidget {
   final UserModel user;
@@ -75,6 +77,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
       ref.read(timetableProvider.notifier).loadSlots();
       ref.read(instituteLinksProvider.notifier).loadLinks();
       ref.read(testimonialsProvider.notifier).loadTestimonials();
+      ref.read(instituteBrandingProvider.notifier).syncFromUser(widget.user);
       _initGlobalSocket();
     });
   }
@@ -267,57 +270,132 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
 
   @override
   Widget build(BuildContext context) {
-    final coachingName = widget.user.effectiveCoachingName;
+    final brandingState = ref.watch(instituteBrandingProvider);
+    final brandColor = brandingState.branding.brandColor;
+    final coachingName = brandingState.branding.name.isNotEmpty
+        ? brandingState.branding.name
+        : widget.user.effectiveCoachingName;
     final facultyName = widget.user.effectiveFacultyName;
+    final instituteCode = brandingState.branding.effectiveCode;
 
     return Theme(
       data: AppTheme.lightTheme,
       child: Scaffold(
         backgroundColor: AppColors.backgroundLight,
-        // Sky-blue App Bar matching reference
+        // Branded App Bar matching institute white-label
         appBar: AppBar(
-        backgroundColor: AppColors.skyBlue,
-        elevation: 0,
-        centerTitle: false,
-        iconTheme: const IconThemeData(color: Colors.white),
-        leading: Builder(
-          builder: (ctx) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.white),
-            tooltip: 'Menu',
-            onPressed: () => Scaffold.of(ctx).openDrawer(),
+          backgroundColor: brandColor,
+          elevation: 0,
+          centerTitle: false,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.menu, color: Colors.white),
+              tooltip: 'Menu',
+              onPressed: () => Scaffold.of(ctx).openDrawer(),
+            ),
           ),
-        ),
-        title: _currentBottomNavIndex == 0
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    coachingName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+          title: _currentBottomNavIndex == 0
+              ? Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: (brandingState.branding.logoUrl != null &&
+                              brandingState.branding.logoUrl!.isNotEmpty)
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                brandingState.branding.logoUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Center(
+                                  child: Text(
+                                    brandingState.branding.initials,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w900,
+                                      color: brandColor,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Center(
+                              child: Text(
+                                brandingState.branding.initials,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
+                                  color: brandColor,
+                                ),
+                              ),
+                            ),
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    'Faculty: $facultyName',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 11,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  coachingName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () => InstituteCodeDialog.show(context),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.22),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    instituteCode,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 9,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            'Faculty: $facultyName',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 11,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              )
-            : Text(
-                _currentBottomNavIndex == 1
-                    ? 'Schedule'
-                    : _currentBottomNavIndex == 2
-                        ? 'Learn'
-                        : 'Settings',
+                  ],
+                )
+              : Text(
+                  _currentBottomNavIndex == 1
+                      ? 'Schedule'
+                      : _currentBottomNavIndex == 2
+                          ? 'Learn'
+                          : 'Settings',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -397,9 +475,12 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
   Widget _buildDrawer() {
     final authState = ref.watch(authStateProvider);
     final currentUser = authState.user ?? widget.user;
-    final instituteCode = (currentUser.institute != null && currentUser.institute!.id.length >= 6)
-        ? currentUser.institute!.id.substring(0, 6).toUpperCase()
-        : 'APEX24';
+    final brandingState = ref.watch(instituteBrandingProvider);
+    final instituteCode = brandingState.branding.effectiveCode;
+    final coachingName = brandingState.branding.name.isNotEmpty
+        ? brandingState.branding.name
+        : currentUser.effectiveCoachingName;
+    final brandColor = brandingState.branding.brandColor;
 
     return Drawer(
       backgroundColor: Colors.white,
@@ -416,14 +497,14 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                 children: [
                   CircleAvatar(
                     radius: 30,
-                    backgroundColor: AppColors.skyBlueLight,
+                    backgroundColor: brandColor.withValues(alpha: 0.15),
                     backgroundImage: (currentUser.avatarUrl != null && currentUser.avatarUrl!.isNotEmpty)
                         ? NetworkImage(currentUser.avatarUrl!)
                         : null,
                     child: (currentUser.avatarUrl == null || currentUser.avatarUrl!.isEmpty)
                         ? Text(
                             currentUser.name.isNotEmpty ? currentUser.name[0].toUpperCase() : 'U',
-                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.skyBlue),
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: brandColor),
                           )
                         : null,
                   ),
@@ -438,17 +519,27 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          currentUser.effectiveCoachingName,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.skyBlue),
+                          coachingName,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: brandColor),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 1),
-                        Text(
-                          'Faculty: ${currentUser.effectiveFacultyName} • Code: $instituteCode',
-                          style: const TextStyle(fontSize: 11, color: AppColors.slate500),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Text(
+                              'Code: $instituteCode',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.slate500),
+                            ),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                                InstituteCodeDialog.show(context);
+                              },
+                              child: Icon(Icons.edit_outlined, size: 13, color: brandColor),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -555,6 +646,14 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                     onTap: () {
                       Navigator.pop(context);
                       _showConnectDialog();
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.vpn_key_outlined,
+                    label: 'Institute Code ($instituteCode)',
+                    onTap: () {
+                      Navigator.pop(context);
+                      InstituteCodeDialog.show(context);
                     },
                   ),
                   _buildDrawerItem(

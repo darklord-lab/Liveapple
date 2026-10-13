@@ -7,9 +7,12 @@ import '../../../core/widgets/empty_state.dart';
 import '../domain/institute_link_model.dart';
 import '../domain/testimonial_model.dart';
 import 'institute_content_controller.dart';
+import 'institute_branding_controller.dart';
 
 class ManageInstituteContentScreen extends ConsumerStatefulWidget {
-  const ManageInstituteContentScreen({super.key});
+  final int initialTabIndex;
+
+  const ManageInstituteContentScreen({super.key, this.initialTabIndex = 0});
 
   @override
   ConsumerState<ManageInstituteContentScreen> createState() =>
@@ -20,20 +23,44 @@ class _ManageInstituteContentScreenState
     extends ConsumerState<ManageInstituteContentScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  late TextEditingController _brandNameController;
+  late TextEditingController _brandCodeController;
+  late TextEditingController _brandColorController;
+  late TextEditingController _brandTaglineController;
+  late TextEditingController _brandLogoController;
+  String _previewColorHex = '#0A9BE8';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: widget.initialTabIndex,
+    );
+    final branding = ref.read(instituteBrandingProvider).branding;
+    _brandNameController = TextEditingController(text: branding.name);
+    _brandCodeController = TextEditingController(text: branding.effectiveCode);
+    _brandColorController = TextEditingController(text: branding.primaryColor ?? '#0A9BE8');
+    _brandTaglineController = TextEditingController(text: branding.tagline ?? '');
+    _brandLogoController = TextEditingController(text: branding.logoUrl ?? '');
+    _previewColorHex = branding.primaryColor ?? '#0A9BE8';
+
     Future.microtask(() {
       ref.read(instituteLinksProvider.notifier).loadLinks(all: true);
       ref.read(testimonialsProvider.notifier).loadTestimonials(all: true);
+      ref.read(instituteBrandingProvider.notifier).loadServerBranding();
     });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _brandNameController.dispose();
+    _brandCodeController.dispose();
+    _brandColorController.dispose();
+    _brandTaglineController.dispose();
+    _brandLogoController.dispose();
     super.dispose();
   }
 
@@ -342,6 +369,7 @@ class _ManageInstituteContentScreenState
             tabs: const [
               Tab(icon: Icon(Icons.share_outlined, size: 18), text: 'Connect Links'),
               Tab(icon: Icon(Icons.rate_review_outlined, size: 18), text: 'Testimonials'),
+              Tab(icon: Icon(Icons.palette_outlined, size: 18), text: 'White-Label'),
             ],
           ),
         ),
@@ -350,6 +378,7 @@ class _ManageInstituteContentScreenState
           children: [
             _buildLinksTab(),
             _buildTestimonialsTab(),
+            _buildBrandingTab(),
           ],
         ),
       ),
@@ -685,6 +714,511 @@ class _ManageInstituteContentScreenState
                 },
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* TAB 3: WHITE-LABEL BRANDING & CODE                                         */
+  /* -------------------------------------------------------------------------- */
+  Widget _buildBrandingTab() {
+    final brandingState = ref.watch(instituteBrandingProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final presetColors = [
+      {'name': 'Sky Blue', 'hex': '#0A9BE8'},
+      {'name': 'Indigo', 'hex': '#4F46E5'},
+      {'name': 'Teal', 'hex': '#0D9488'},
+      {'name': 'Emerald', 'hex': '#10B981'},
+      {'name': 'Amber', 'hex': '#D97706'},
+      {'name': 'Crimson', 'hex': '#DC2626'},
+      {'name': 'Purple', 'hex': '#7C3AED'},
+    ];
+
+    Color previewColor;
+    try {
+      final h = _previewColorHex.replaceAll('#', '').trim();
+      previewColor = Color(int.parse('FF$h', radix: 16));
+    } catch (_) {
+      previewColor = AppColors.primary;
+    }
+
+    final displayName = _brandNameController.text.trim().isNotEmpty
+        ? _brandNameController.text.trim()
+        : 'Apex Academy';
+    final displayCode = _brandCodeController.text.trim().isNotEmpty
+        ? _brandCodeController.text.trim().toUpperCase()
+        : 'APEX01';
+    final displayTagline = _brandTaglineController.text.trim().isNotEmpty
+        ? _brandTaglineController.text.trim()
+        : 'Premier IIT-JEE & Medical Academy';
+
+    String previewInitials = 'A';
+    final parts = displayName.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.length >= 2) {
+      previewInitials = '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    } else if (parts.isNotEmpty) {
+      previewInitials = parts[0][0].toUpperCase();
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 1. Live Preview Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.surfaceDark : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderLight),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.remove_red_eye_outlined, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'STUDENT APP BAR LIVE PREVIEW',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: AppColors.textMutedLight,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.successLight,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'WHITE-LABEL ACTIVE',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.success),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Mock Student App Bar
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.backgroundDark : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: previewColor.withValues(alpha: 0.3), width: 1.5),
+                  ),
+                  child: Row(
+                    children: [
+                      // Monogram badge
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: previewColor,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: previewColor.withValues(alpha: 0.35),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Text(
+                            previewInitials,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    displayName,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 15,
+                                      color: isDark ? AppColors.textDark : AppColors.textLight,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: previewColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: previewColor.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Text(
+                                    displayCode,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      color: previewColor,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              displayTagline,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textMutedLight,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // 2. Settings Form
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.surfaceDark : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderLight),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'ACADEMY IDENTITY',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: AppColors.textMutedLight,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Institute Name
+                const Text(
+                  'Institute / Academy Name *',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textLight),
+                ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _brandNameController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Apex IIT-JEE & Medical Academy',
+                    prefixIcon: const Icon(Icons.school_outlined, size: 20, color: AppColors.primary),
+                    filled: true,
+                    fillColor: isDark ? AppColors.slate800 : AppColors.slate50,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Institute Code
+                Row(
+                  children: [
+                    const Text(
+                      'Institute Code *',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textLight),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'STUDENT ONBOARDING',
+                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.primary),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Students enter this 6-character code during first app launch to connect to your academy.',
+                  style: TextStyle(fontSize: 11, color: AppColors.textMutedLight),
+                ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _brandCodeController,
+                  textCapitalization: TextCapitalization.characters,
+                  onChanged: (_) => setState(() {}),
+                  style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. APEX01',
+                    prefixIcon: const Icon(Icons.vpn_key_outlined, size: 20, color: AppColors.primary),
+                    filled: true,
+                    fillColor: isDark ? AppColors.slate800 : AppColors.slate50,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Tagline
+                const Text(
+                  'Academy Tagline / Subtitle',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textLight),
+                ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _brandTaglineController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Premier IIT-JEE & Medical Academy',
+                    prefixIcon: const Icon(Icons.stars_outlined, size: 20, color: AppColors.primary),
+                    filled: true,
+                    fillColor: isDark ? AppColors.slate800 : AppColors.slate50,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Logo URL
+                const Text(
+                  'Custom Logo Image URL',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textLight),
+                ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _brandLogoController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'https://...',
+                    prefixIcon: const Icon(Icons.image_outlined, size: 20, color: AppColors.primary),
+                    filled: true,
+                    fillColor: isDark ? AppColors.slate800 : AppColors.slate50,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Brand Color Selection
+                const Text(
+                  'PRIMARY BRAND COLOR',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: AppColors.textMutedLight,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Color presets
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: presetColors.map((c) {
+                    final isSelected = _previewColorHex.toUpperCase() == (c['hex'] as String).toUpperCase();
+                    final color = Color(int.parse('FF${(c['hex'] as String).replaceAll('#', '')}', radix: 16));
+
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _previewColorHex = c['hex'] as String;
+                          _brandColorController.text = c['hex'] as String;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isSelected ? color.withValues(alpha: 0.15) : AppColors.slate100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected ? color : AppColors.borderLight,
+                            width: isSelected ? 2 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              c['name'] as String,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                color: isSelected ? color : AppColors.textLight,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+
+                // Hex input
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: previewColor,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.borderLight),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _brandColorController,
+                        onChanged: (val) {
+                          if (val.startsWith('#') && (val.length == 7 || val.length == 4)) {
+                            setState(() {
+                              _previewColorHex = val;
+                            });
+                          }
+                        },
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        decoration: InputDecoration(
+                          labelText: 'Custom Hex Color',
+                          hintText: '#0A9BE8',
+                          filled: true,
+                          fillColor: isDark ? AppColors.slate800 : AppColors.slate50,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Save Button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: previewColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
+                    icon: brandingState.isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.check, size: 20),
+                    label: Text(
+                      brandingState.isSaving ? 'Saving Branding...' : 'Save White-Label Branding',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    onPressed: brandingState.isSaving
+                        ? null
+                        : () async {
+                            final name = _brandNameController.text.trim();
+                            final code = _brandCodeController.text.trim().toUpperCase();
+
+                            if (name.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Institute name is required')),
+                              );
+                              return;
+                            }
+                            if (code.length < 3) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Institute code must be at least 3 characters')),
+                              );
+                              return;
+                            }
+
+                            final success = await ref.read(instituteBrandingProvider.notifier).updateBranding(
+                                  name: name,
+                                  code: code,
+                                  primaryColor: _previewColorHex,
+                                  logoUrl: _brandLogoController.text.trim().isNotEmpty
+                                      ? _brandLogoController.text.trim()
+                                      : null,
+                                  tagline: _brandTaglineController.text.trim().isNotEmpty
+                                      ? _brandTaglineController.text.trim()
+                                      : null,
+                                );
+
+                            if (!mounted) return;
+
+                            if (success) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  backgroundColor: previewColor,
+                                  content: const Text(
+                                    'White-label branding updated successfully! All devices updated.',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              );
+                            } else {
+                              final err = ref.read(instituteBrandingProvider).error;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  backgroundColor: AppColors.error,
+                                  content: Text(err ?? 'Failed to update branding'),
+                                ),
+                              );
+                            }
+                          },
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

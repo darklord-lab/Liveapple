@@ -8,6 +8,8 @@ import '../../../core/network/endpoints.dart';
 import '../../../core/storage/secure_storage.dart';
 import 'auth_controller.dart';
 import '../domain/auth_state.dart';
+import '../../institute/presentation/institute_branding_controller.dart';
+import '../../institute/presentation/institute_code_dialog.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -231,6 +233,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final brandingState = ref.watch(instituteBrandingProvider);
     final isLoading = authState.status == AuthStatus.loading;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -240,6 +243,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.school_outlined, color: AppColors.primary),
+            tooltip: 'Enter Institute Code',
+            onPressed: () => InstituteCodeDialog.show(context),
+          ),
           if (kDebugMode)
             IconButton(
               icon: const Icon(Icons.settings_outlined, color: AppColors.textMutedLight),
@@ -322,7 +330,87 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       height: 1.3,
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
+
+                  // Institute White-Label Card on Login Screen
+                  GestureDetector(
+                    onTap: () => InstituteCodeDialog.show(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.slate800 : Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: brandingState.branding.brandColor.withValues(alpha: 0.35),
+                          width: 1.2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: brandingState.branding.brandColor,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                brandingState.branding.initials,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  brandingState.branding.name,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark ? AppColors.textDark : AppColors.textLight,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 1),
+                                Text(
+                                  'Institute Code: ${brandingState.branding.effectiveCode} • Tap to change',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: AppColors.textMutedLight,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: brandingState.branding.brandColor.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.vpn_key_outlined, size: 14, color: brandingState.branding.brandColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
 
                   // Error Banner
                   if (authState.status == AuthStatus.error && authState.errorMessage != null)

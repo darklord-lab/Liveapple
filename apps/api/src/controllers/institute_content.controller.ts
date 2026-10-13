@@ -42,6 +42,14 @@ const updateTestimonialSchema = z.object({
   isPublished: z.boolean().optional(),
 });
 
+const updateBrandingSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name must be at most 100 characters').optional(),
+  code: z.string().min(3, 'Code must be at least 3 characters').max(12, 'Code must be at most 12 characters').regex(/^[A-Za-z0-9_-]+$/, 'Code can only contain letters, numbers, hyphens, and underscores').optional(),
+  logoUrl: z.string().max(500).optional().nullable(),
+  primaryColor: z.string().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, 'Must be a valid hex color code (e.g. #0A9BE8)').optional(),
+  tagline: z.string().max(200).optional().nullable(),
+});
+
 export class InstituteContentController {
   /* -------------------------------------------------------------------------- */
   /* LINKS                                                                      */
@@ -181,6 +189,54 @@ export class InstituteContentController {
       res.status(200).json({
         status: 'success',
         data: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* WHITE-LABEL BRANDING & CODE LOOKUP                                         */
+  /* -------------------------------------------------------------------------- */
+  static async lookupByCode(req: Request, res: Response, next: NextFunction) {
+    try {
+      const code = req.params.code;
+      const result = await instituteContentService.lookupByCode(code);
+
+      res.status(200).json({
+        status: 'success',
+        data: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getBranding(req: Request, res: Response, next: NextFunction) {
+    try {
+      const instituteId = req.user!.instituteId;
+      const branding = await instituteContentService.getBranding(instituteId);
+
+      res.status(200).json({
+        status: 'success',
+        data: branding,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateBranding(req: Request, res: Response, next: NextFunction) {
+    try {
+      const instituteId = req.user!.instituteId;
+      const actorId = req.user!.userId;
+      const body = updateBrandingSchema.parse(req.body);
+
+      const updated = await instituteContentService.updateBranding(instituteId, actorId, body);
+
+      res.status(200).json({
+        status: 'success',
+        data: updated,
       });
     } catch (err) {
       next(err);

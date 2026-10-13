@@ -40,7 +40,7 @@ Legend: `[x]` done and proven · `[v]` reported done, needs verification on real
 - [x] 4.2 Edit Profile (photo via camera/gallery), Settings (notification prefs, share, rate, sign out, version)
 - [x] 4.3 Help / How to use (per-role walkthrough)
 - [x] 4.4 Institute Links ("Connect With Us") + Testimonials (admin CRUD, student view)
-- [ ] 4.5 Institute Code + white-label (code entry, name/logo/color in app bar)
+- [x] 4.5 Institute Code + white-label (code entry, name/logo/color in app bar)
 - [ ] 4.6 Share score + app link (share card, deep link)
 - [ ] 4.7 Picture-in-Picture (live class, recordings; Android first)
 - [ ] 4.8 Filters + Sort sheets on lists (batch, subject, status, newest)

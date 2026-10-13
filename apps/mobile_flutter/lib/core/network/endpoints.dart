@@ -80,6 +80,10 @@ class Endpoints {
   static const String instituteTestimonials = '/v1/institute/testimonials';
   static String instituteTestimonial(String id) => '/v1/institute/testimonials/$id';
 
+  // Phase 4.5 Institute Code & White-Label Branding
+  static String instituteLookup(String code) => '/v1/institute/lookup/$code';
+  static const String instituteBranding = '/v1/institute/branding';
+
   // Health
   static const String health = '/health';
 }

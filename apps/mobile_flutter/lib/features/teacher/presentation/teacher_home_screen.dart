@@ -20,6 +20,8 @@ import '../../notifications/presentation/widgets/notification_bell_button.dart';
 import '../../timetable/domain/timetable_model.dart';
 import '../../timetable/presentation/add_timetable_slot_dialog.dart';
 import '../../timetable/presentation/timetable_controller.dart';
+import '../../institute/presentation/institute_branding_controller.dart';
+import '../../institute/presentation/institute_code_dialog.dart';
 
 class TeacherHomeScreen extends ConsumerStatefulWidget {
   final UserModel user;
@@ -48,6 +50,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
       ref.read(batchListProvider.notifier).loadBatches();
       ref.read(timetableProvider.notifier).loadSlots();
       ref.read(liveClassProvider.notifier).loadClasses();
+      ref.read(instituteBrandingProvider.notifier).syncFromUser(widget.user);
     });
   }
 
@@ -109,14 +112,19 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final instituteName = widget.user.institute?.name ?? 'Classora Academy';
+    final brandingState = ref.watch(instituteBrandingProvider);
+    final brandColor = brandingState.branding.brandColor;
+    final instituteName = brandingState.branding.name.isNotEmpty
+        ? brandingState.branding.name
+        : (widget.user.institute?.name ?? 'Classora Faculty');
+    final instituteCode = brandingState.branding.effectiveCode;
 
     return Theme(
       data: AppTheme.lightTheme,
       child: Scaffold(
         backgroundColor: AppColors.backgroundLight,
         appBar: AppBar(
-          backgroundColor: AppColors.skyBlue,
+          backgroundColor: brandColor,
           elevation: 0,
           centerTitle: false,
           iconTheme: const IconThemeData(color: Colors.white),
@@ -127,20 +135,112 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
               onPressed: () => Scaffold.of(ctx).openDrawer(),
             ),
           ),
-          title: Text(
-            _currentBottomNavIndex == 0
-                ? instituteName
-                : _currentBottomNavIndex == 1
-                    ? 'Timetable Manager'
-                    : _currentBottomNavIndex == 2
-                        ? 'My Batches'
-                        : 'Faculty Profile',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 17,
-            ),
-          ),
+          title: _currentBottomNavIndex == 0
+              ? Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: (brandingState.branding.logoUrl != null &&
+                              brandingState.branding.logoUrl!.isNotEmpty)
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                brandingState.branding.logoUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Center(
+                                  child: Text(
+                                    brandingState.branding.initials,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w900,
+                                      color: brandColor,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Center(
+                              child: Text(
+                                brandingState.branding.initials,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
+                                  color: brandColor,
+                                ),
+                              ),
+                            ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  instituteName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () => InstituteCodeDialog.show(context),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.22),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    instituteCode,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Text(
+                            'Faculty Portal',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              : Text(
+                  _currentBottomNavIndex == 1
+                      ? 'Timetable Manager'
+                      : _currentBottomNavIndex == 2
+                          ? 'My Batches'
+                          : 'Faculty Profile',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                  ),
+                ),
           actions: [
             const NotificationBellButton(),
             const SizedBox(width: 8),
@@ -172,7 +272,7 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
               });
             },
             backgroundColor: Colors.white,
-            selectedItemColor: AppColors.skyBlue,
+            selectedItemColor: brandColor,
             unselectedItemColor: AppColors.slate400,
             selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
             unselectedLabelStyle: const TextStyle(fontSize: 11),
@@ -194,9 +294,12 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
   /* DRAWER (FACULTY)                                                           */
   /* -------------------------------------------------------------------------- */
   Widget _buildDrawer() {
-    final instituteCode = (widget.user.institute != null && widget.user.institute!.id.length >= 6)
-        ? widget.user.institute!.id.substring(0, 6).toUpperCase()
-        : 'APEX24';
+    final brandingState = ref.watch(instituteBrandingProvider);
+    final instituteCode = brandingState.branding.effectiveCode;
+    final coachingName = brandingState.branding.name.isNotEmpty
+        ? brandingState.branding.name
+        : (widget.user.institute?.name ?? 'Classora Faculty');
+    final brandColor = brandingState.branding.brandColor;
 
     return Drawer(
       backgroundColor: Colors.white,
@@ -212,10 +315,10 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundColor: AppColors.skyBlueLight,
+                    backgroundColor: brandColor.withValues(alpha: 0.15),
                     child: Text(
                       widget.user.name.isNotEmpty ? widget.user.name[0].toUpperCase() : 'F',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.skyBlue),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: brandColor),
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -229,10 +332,29 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 2),
                         Text(
-                          'Faculty • Code $instituteCode',
-                          style: const TextStyle(fontSize: 12, color: AppColors.slate500),
+                          coachingName,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: brandColor),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 1),
+                        Row(
+                          children: [
+                            Text(
+                              'Faculty • Code $instituteCode',
+                              style: const TextStyle(fontSize: 12, color: AppColors.slate500),
+                            ),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                                InstituteCodeDialog.show(context);
+                              },
+                              child: Icon(Icons.edit_outlined, size: 13, color: brandColor),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -310,6 +432,14 @@ class _TeacherHomeScreenState extends ConsumerState<TeacherHomeScreen> {
                     onTap: () {
                       Navigator.pop(context);
                       setState(() => _currentBottomNavIndex = 3);
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.vpn_key_outlined,
+                    label: 'Institute Code ($instituteCode)',
+                    onTap: () {
+                      Navigator.pop(context);
+                      InstituteCodeDialog.show(context);
                     },
                   ),
                   _buildDrawerItem(

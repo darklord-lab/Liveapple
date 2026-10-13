@@ -22,6 +22,8 @@ import '../domain/teacher_model.dart';
 import 'add_teacher_dialog.dart';
 import 'admin_controller.dart';
 import 'bulk_onboard_dialog.dart';
+import '../../institute/presentation/institute_branding_controller.dart';
+import '../../institute/presentation/institute_code_dialog.dart';
 
 class AdminHomeScreen extends ConsumerStatefulWidget {
   final UserModel user;
@@ -43,6 +45,7 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
       ref.read(adminTeachersProvider.notifier).loadTeachers();
       ref.read(batchListProvider.notifier).loadBatches();
       ref.read(liveClassProvider.notifier).loadClasses();
+      ref.read(instituteBrandingProvider.notifier).syncFromUser(widget.user);
     });
   }
 
@@ -75,14 +78,19 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final instituteName = widget.user.institute?.name ?? 'Classora Admin Console';
+    final brandingState = ref.watch(instituteBrandingProvider);
+    final brandColor = brandingState.branding.brandColor;
+    final instituteName = brandingState.branding.name.isNotEmpty
+        ? brandingState.branding.name
+        : (widget.user.institute?.name ?? 'Classora Admin Console');
+    final instituteCode = brandingState.branding.effectiveCode;
 
     return Theme(
       data: AppTheme.lightTheme,
       child: Scaffold(
         backgroundColor: AppColors.backgroundLight,
         appBar: AppBar(
-          backgroundColor: AppColors.skyBlue,
+          backgroundColor: brandColor,
           elevation: 0,
           centerTitle: false,
           iconTheme: const IconThemeData(color: Colors.white),
@@ -93,36 +101,130 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
               onPressed: () => Scaffold.of(ctx).openDrawer(),
             ),
           ),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _currentBottomNavIndex == 0
-                    ? instituteName
-                    : _currentBottomNavIndex == 1
-                        ? 'Faculty Directory'
-                        : _currentBottomNavIndex == 2
-                            ? 'Cohort Batches'
-                            : 'Admin Hub',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+          title: _currentBottomNavIndex == 0
+              ? Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: (brandingState.branding.logoUrl != null &&
+                              brandingState.branding.logoUrl!.isNotEmpty)
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                brandingState.branding.logoUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Center(
+                                  child: Text(
+                                    brandingState.branding.initials,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w900,
+                                      color: brandColor,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Center(
+                              child: Text(
+                                brandingState.branding.initials,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
+                                  color: brandColor,
+                                ),
+                              ),
+                            ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  instituteName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () => InstituteCodeDialog.show(context),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.22),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    instituteCode,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Text(
+                            'ADMINISTRATOR CONSOLE',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _currentBottomNavIndex == 1
+                          ? 'Faculty Directory'
+                          : _currentBottomNavIndex == 2
+                              ? 'Cohort Batches'
+                              : 'Admin Hub',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const Text(
+                      'ADMINISTRATOR CONSOLE',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ],
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const Text(
-                'ADMINISTRATOR CONSOLE',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ],
-          ),
           actions: [
             const NotificationBellButton(),
             const SizedBox(width: 8),
@@ -150,7 +252,7 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
             currentIndex: _currentBottomNavIndex,
             onTap: (idx) => setState(() => _currentBottomNavIndex = idx),
             backgroundColor: Colors.white,
-            selectedItemColor: AppColors.skyBlue,
+            selectedItemColor: brandColor,
             unselectedItemColor: AppColors.slate400,
             selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
             unselectedLabelStyle: const TextStyle(fontSize: 11),
@@ -172,9 +274,12 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
   /* DRAWER (ADMIN)                                                             */
   /* -------------------------------------------------------------------------- */
   Widget _buildDrawer() {
-    final instituteCode = (widget.user.institute != null && widget.user.institute!.id.length >= 6)
-        ? widget.user.institute!.id.substring(0, 6).toUpperCase()
-        : 'APEX24';
+    final brandingState = ref.watch(instituteBrandingProvider);
+    final instituteCode = brandingState.branding.effectiveCode;
+    final coachingName = brandingState.branding.name.isNotEmpty
+        ? brandingState.branding.name
+        : (widget.user.institute?.name ?? 'Classora Academy');
+    final brandColor = brandingState.branding.brandColor;
 
     return Drawer(
       backgroundColor: Colors.white,
@@ -188,10 +293,10 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
               ),
               child: Row(
                 children: [
-                  const CircleAvatar(
+                  CircleAvatar(
                     radius: 28,
-                    backgroundColor: AppColors.skyBlueLight,
-                    child: Icon(Icons.admin_panel_settings, size: 28, color: AppColors.skyBlue),
+                    backgroundColor: brandColor.withValues(alpha: 0.15),
+                    child: Icon(Icons.admin_panel_settings, size: 28, color: brandColor),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -204,10 +309,29 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 2),
                         Text(
-                          'Administrator • Code $instituteCode',
-                          style: const TextStyle(fontSize: 12, color: AppColors.slate500),
+                          coachingName,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: brandColor),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 1),
+                        Row(
+                          children: [
+                            Text(
+                              'Administrator • Code $instituteCode',
+                              style: const TextStyle(fontSize: 12, color: AppColors.slate500),
+                            ),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                                InstituteCodeDialog.show(context);
+                              },
+                              child: Icon(Icons.edit_outlined, size: 13, color: brandColor),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -285,19 +409,27 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
                     },
                   ),
                   _buildDrawerItem(
+                    icon: Icons.vpn_key_outlined,
+                    label: 'Institute Code ($instituteCode)',
+                    onTap: () {
+                      Navigator.pop(context);
+                      InstituteCodeDialog.show(context);
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.palette_outlined,
+                    label: 'White-Label & Web Content',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/institute-content');
+                    },
+                  ),
+                  _buildDrawerItem(
                     icon: Icons.help_outline,
                     label: 'Help & Administrator Guide',
                     onTap: () {
                       Navigator.pop(context);
                       context.push('/help?role=ADMIN');
-                    },
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.share_outlined,
-                    label: 'Connect Links & Testimonials',
-                    onTap: () {
-                      Navigator.pop(context);
-                      context.push('/institute-content');
                     },
                   ),
                   _buildDrawerItem(

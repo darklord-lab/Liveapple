@@ -82,7 +82,7 @@ export class AuthController {
         where: { id: req.user.userId },
         include: {
           institute: {
-            select: { id: true, name: true, slug: true, plan: true },
+            select: { id: true, name: true, slug: true, code: true, logoUrl: true, primaryColor: true, tagline: true, plan: true },
           },
           creatorTeacher: true,
         },

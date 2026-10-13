@@ -40,6 +40,14 @@ export interface UpdateTestimonialDto {
   isPublished?: boolean;
 }
 
+export interface UpdateBrandingDto {
+  name?: string;
+  code?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  tagline?: string;
+}
+
 export class InstituteContentService {
   /* -------------------------------------------------------------------------- */
   /* INSTITUTE SOCIAL / CONNECT LINKS                                           */
@@ -211,7 +219,7 @@ export class InstituteContentService {
     });
 
     if (!existing) {
-      throw new AppError('Testimonial not found', 404, 'NOT_FOUND');
+      throw new AppError('NOT_FOUND', 'Testimonial not found', 404);
     }
 
     await prisma.testimonial.delete({
@@ -227,6 +235,147 @@ export class InstituteContentService {
     });
 
     return { success: true, message: 'Testimonial deleted successfully' };
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* INSTITUTE WHITE-LABEL BRANDING & CODE LOOKUP                               */
+  /* -------------------------------------------------------------------------- */
+  async lookupByCode(codeOrSlug: string) {
+    const raw = (codeOrSlug || '').trim();
+    if (!raw) {
+      throw new AppError('BAD_REQUEST', 'Institute code is required', 400);
+    }
+    const codeUpper = raw.toUpperCase();
+    const slugLower = raw.toLowerCase();
+
+    const institute = await prisma.institute.findFirst({
+      where: {
+        OR: [
+          { code: codeUpper },
+          { slug: slugLower },
+          { id: raw },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        code: true,
+        logoUrl: true,
+        primaryColor: true,
+        tagline: true,
+        plan: true,
+      },
+    });
+
+    if (!institute) {
+      throw new AppError('NOT_FOUND', `Institute not found for code: ${codeUpper}`, 404);
+    }
+
+    const links = await prisma.instituteLink.findMany({
+      where: { instituteId: institute.id, isActive: true },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    return {
+      institute,
+      links,
+    };
+  }
+
+  async getBranding(instituteId: string) {
+    const institute = await prisma.institute.findUnique({
+      where: { id: instituteId },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        code: true,
+        logoUrl: true,
+        primaryColor: true,
+        tagline: true,
+        plan: true,
+      },
+    });
+
+    if (!institute) {
+      throw new AppError('NOT_FOUND', 'Institute not found', 404);
+    }
+
+    return institute;
+  }
+
+  async updateBranding(instituteId: string, actorId: string, data: UpdateBrandingDto) {
+    const institute = await prisma.institute.findUnique({
+      where: { id: instituteId },
+    });
+
+    if (!institute) {
+      throw new AppError('NOT_FOUND', 'Institute not found', 404);
+    }
+
+    let codeToSet: string | undefined = undefined;
+    if (data.code !== undefined) {
+      const trimmedCode = data.code.trim().toUpperCase();
+      if (trimmedCode.length < 3 || trimmedCode.length > 12) {
+        throw new AppError('BAD_REQUEST', 'Institute code must be between 3 and 12 characters', 400);
+      }
+      if (!/^[A-Z0-9_-]+$/.test(trimmedCode)) {
+        throw new AppError('BAD_REQUEST', 'Institute code can only contain letters, numbers, hyphens, and underscores', 400);
+      }
+
+      // Check conflict
+      const existing = await prisma.institute.findFirst({
+        where: {
+          code: trimmedCode,
+          NOT: { id: instituteId },
+        },
+      });
+      if (existing) {
+        throw new AppError('CONFLICT', `Institute code '${trimmedCode}' is already in use by another institute`, 409);
+      }
+      codeToSet = trimmedCode;
+    }
+
+    let colorToSet: string | undefined = undefined;
+    if (data.primaryColor !== undefined) {
+      const trimmedColor = data.primaryColor.trim();
+      if (!/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(trimmedColor)) {
+        throw new AppError('BAD_REQUEST', 'Primary color must be a valid hex color (e.g. #0A9BE8)', 400);
+      }
+      colorToSet = trimmedColor;
+    }
+
+    const updated = await prisma.institute.update({
+      where: { id: instituteId },
+      data: {
+        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+        ...(codeToSet !== undefined ? { code: codeToSet } : {}),
+        ...(data.logoUrl !== undefined ? { logoUrl: data.logoUrl ? data.logoUrl.trim() : null } : {}),
+        ...(colorToSet !== undefined ? { primaryColor: colorToSet } : {}),
+        ...(data.tagline !== undefined ? { tagline: data.tagline ? data.tagline.trim() : null } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        code: true,
+        logoUrl: true,
+        primaryColor: true,
+        tagline: true,
+        plan: true,
+      },
+    });
+
+    await logAudit({
+      instituteId,
+      actorId,
+      action: 'INSTITUTE_BRANDING_UPDATED',
+      entity: `Institute:${instituteId}`,
+      meta: { changes: data },
+    });
+
+    return updated;
   }
 }
 

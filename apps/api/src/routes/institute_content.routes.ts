@@ -5,8 +5,20 @@ import { tenantGuard } from '../middlewares/tenant.js';
 
 const router = Router();
 
-// 1. All routes require valid auth and tenant scoping
+// Public route for first launch & code verification (no auth required)
+router.get('/lookup/:code', InstituteContentController.lookupByCode);
+
+// All subsequent routes require valid auth and tenant scoping
 router.use(authenticate, tenantGuard);
+
+/* -------------------------------------------------------------------------- */
+/* WHITE-LABEL BRANDING                                                       */
+/* -------------------------------------------------------------------------- */
+// GET: Accessible by all authenticated roles (Students, Teachers, Admins)
+router.get('/branding', InstituteContentController.getBranding);
+
+// Admin-only management endpoint
+router.patch('/branding', requireRole('ADMIN'), InstituteContentController.updateBranding);
 
 /* -------------------------------------------------------------------------- */
 /* INSTITUTE SOCIAL & CONNECT LINKS                                           */
