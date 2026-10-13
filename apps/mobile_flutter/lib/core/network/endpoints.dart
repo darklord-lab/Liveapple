@@ -74,6 +74,12 @@ class Endpoints {
   static String deleteMaterial(String materialId) => '/v1/materials/$materialId';
   static String deleteFolder(String folderId) => '/v1/materials/folders/$folderId';
 
+  // Phase 4.4 Institute Links & Testimonials
+  static const String instituteLinks = '/v1/institute/links';
+  static String instituteLink(String id) => '/v1/institute/links/$id';
+  static const String instituteTestimonials = '/v1/institute/testimonials';
+  static String instituteTestimonial(String id) => '/v1/institute/testimonials/$id';
+
   // Health
   static const String health = '/health';
 }

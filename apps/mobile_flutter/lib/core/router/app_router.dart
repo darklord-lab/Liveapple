@@ -17,6 +17,7 @@ import '../../features/learning/presentation/screens/fees_screen.dart';
 import '../../features/learning/presentation/screens/attendance_screen.dart';
 import '../../features/auth/presentation/edit_profile_screen.dart';
 import '../../features/help/presentation/help_walkthrough_screen.dart';
+import '../../features/institute/presentation/manage_institute_content_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
@@ -83,6 +84,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           user: authState.user,
           openTourImmediately: state.uri.queryParameters['tour'] == 'true',
         ),
+      ),
+      GoRoute(
+        path: '/institute-content',
+        builder: (context, state) => const ManageInstituteContentScreen(),
       ),
     ],
     redirect: (BuildContext context, GoRouterState state) {

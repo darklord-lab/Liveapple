@@ -39,7 +39,7 @@ Legend: `[x]` done and proven · `[v]` reported done, needs verification on real
 - [x] 4.1 Study Material: folders, upload (PDF/doc/link), free flag, student view/download, storage adapter, upload security tests
 - [x] 4.2 Edit Profile (photo via camera/gallery), Settings (notification prefs, share, rate, sign out, version)
 - [x] 4.3 Help / How to use (per-role walkthrough)
-- [ ] 4.4 Institute Links ("Connect With Us") + Testimonials (admin CRUD, student view)
+- [x] 4.4 Institute Links ("Connect With Us") + Testimonials (admin CRUD, student view)
 - [ ] 4.5 Institute Code + white-label (code entry, name/logo/color in app bar)
 - [ ] 4.6 Share score + app link (share card, deep link)
 - [ ] 4.7 Picture-in-Picture (live class, recordings; Android first)

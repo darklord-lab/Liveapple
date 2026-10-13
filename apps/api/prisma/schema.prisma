@@ -38,6 +38,8 @@ model Institute {
   payments       Payment[]
   materialFolders MaterialFolder[]
   studyMaterials StudyMaterial[]
+  links          InstituteLink[]
+  testimonials   Testimonial[]
 }
 
 model User {
@@ -454,5 +456,40 @@ model StudyMaterial {
   @@index([instituteId, batchId, folderId])
   @@index([instituteId, isFree])
   @@index([uploadedById])
+}
+
+model InstituteLink {
+  id          String    @id @default(cuid())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  title       String
+  platform    String    // "YOUTUBE" | "TELEGRAM" | "WHATSAPP" | "INSTAGRAM" | "WEBSITE" | "OTHER"
+  url         String
+  icon        String?
+  order       Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([instituteId, isActive])
+  @@index([instituteId, order])
+}
+
+model Testimonial {
+  id          String    @id @default(cuid())
+  instituteId String
+  institute   Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  studentName String
+  batchOrExam String?   // e.g. "JEE Advanced 2024", "NEET Batch A"
+  quote       String
+  avatarUrl   String?
+  rating      Int       @default(5)
+  order       Int       @default(0)
+  isPublished Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([instituteId, isPublished])
+  @@index([instituteId, order])
 }
 

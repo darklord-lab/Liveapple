@@ -293,6 +293,14 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
                     },
                   ),
                   _buildDrawerItem(
+                    icon: Icons.share_outlined,
+                    label: 'Connect Links & Testimonials',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push('/institute-content');
+                    },
+                  ),
+                  _buildDrawerItem(
                     icon: Icons.logout,
                     label: 'Sign Out',
                     textColor: AppColors.liveRed,
@@ -1103,6 +1111,12 @@ class _AdminHomeScreenState extends ConsumerState<AdminHomeScreen> {
             title: 'Help & Administrator Guide',
             subtitle: 'Onboarding walkthrough, security and admin FAQs',
             onTap: () => context.push('/help?role=ADMIN'),
+          ),
+          _buildModuleTile(
+            icon: Icons.share_rounded,
+            title: 'Branding, Links & Testimonials',
+            subtitle: 'Curate YouTube/Telegram/WhatsApp channels and reviews',
+            onTap: () => context.push('/institute-content'),
           ),
 
           const SizedBox(height: 20),

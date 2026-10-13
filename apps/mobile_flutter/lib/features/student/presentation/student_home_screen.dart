@@ -27,6 +27,9 @@ import '../../../core/widgets/status_pill.dart';
 import '../../../core/widgets/permission_rationale_dialog.dart';
 import '../../../core/widgets/confirm_dialog.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../institute/domain/institute_link_model.dart';
+import '../../institute/domain/testimonial_model.dart';
+import '../../institute/presentation/institute_content_controller.dart';
 
 class StudentHomeScreen extends ConsumerStatefulWidget {
   final UserModel user;
@@ -70,6 +73,8 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
       ref.read(liveClassProvider.notifier).loadClasses();
       ref.read(batchListProvider.notifier).loadBatches();
       ref.read(timetableProvider.notifier).loadSlots();
+      ref.read(instituteLinksProvider.notifier).loadLinks();
+      ref.read(testimonialsProvider.notifier).loadTestimonials();
       _initGlobalSocket();
     });
   }
@@ -545,6 +550,14 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                     },
                   ),
                   _buildDrawerItem(
+                    icon: Icons.share_rounded,
+                    label: 'Connect With Us',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showConnectDialog();
+                    },
+                  ),
+                  _buildDrawerItem(
                     icon: Icons.shield_outlined,
                     label: 'Privacy Policy',
                     onTap: () {
@@ -600,6 +613,8 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
   /* -------------------------------------------------------------------------- */
   Widget _buildHomeTab() {
     final liveClassState = ref.watch(liveClassProvider);
+    final linksState = ref.watch(instituteLinksProvider);
+    final testimonialsState = ref.watch(testimonialsProvider);
     final classes = liveClassState.classes;
 
     // Find first active LIVE class, or null
@@ -615,6 +630,8 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
       onRefresh: () async {
         await ref.read(liveClassProvider.notifier).loadClasses();
         await ref.read(batchListProvider.notifier).loadBatches();
+        await ref.read(instituteLinksProvider.notifier).loadLinks();
+        await ref.read(testimonialsProvider.notifier).loadTestimonials();
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -892,40 +909,11 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
 
             const SizedBox(height: 14),
 
-            // 5. Connect with us Card
-            InkWell(
-              onTap: _showConnectDialog,
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.borderLight),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(
-                        color: AppColors.skyBlueLight,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.link, color: AppColors.skyBlue, size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Connect with us', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        SizedBox(height: 2),
-                        Text('YouTube • Telegram • WhatsApp', style: TextStyle(color: AppColors.slate500, fontSize: 12)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            // 5. Student Testimonials Section (DESIGN.md)
+            _buildTestimonialsSection(testimonialsState.testimonials),
+
+            // 6. Connect With Us Section (DESIGN.md: only if links set)
+            _buildConnectWithUsSection(linksState.links),
 
             const SizedBox(height: 20),
           ],
@@ -1824,23 +1812,243 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
   }
 
   void _showConnectDialog() {
+    final links = ref.read(instituteLinksProvider).links;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Connect with us'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
           children: [
-            ListTile(leading: Icon(Icons.play_circle_filled, color: Colors.red), title: Text('YouTube Channel')),
-            ListTile(leading: Icon(Icons.telegram, color: Colors.blue), title: Text('Telegram Group')),
-            ListTile(leading: Icon(Icons.chat, color: Colors.green), title: Text('WhatsApp Support')),
+            Icon(Icons.share_rounded, color: AppColors.skyBlue, size: 22),
+            SizedBox(width: 8),
+            Text('Connect With Us', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           ],
         ),
+        content: links.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('No official connect links published yet by your institute.', style: TextStyle(color: AppColors.slate500, fontSize: 13)),
+              )
+            : SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: links.map((link) {
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: link.brandColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(link.iconData, color: link.brandColor, size: 20),
+                      ),
+                      title: Text(link.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      subtitle: Text(link.url, style: const TextStyle(fontSize: 11, color: AppColors.slate500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      trailing: const Icon(Icons.copy, size: 16, color: AppColors.skyBlue),
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: link.url));
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${link.title} link copied to clipboard!'),
+                            backgroundColor: AppColors.skyBlue,
+                          ),
+                        );
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold))),
         ],
       ),
+    );
+  }
+
+  Widget _buildTestimonialsSection(List<TestimonialModel> testimonials) {
+    if (testimonials.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 18),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Student Testimonials',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textLight),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.star_rounded, size: 14, color: Color(0xFFD97706)),
+                  SizedBox(width: 3),
+                  Text('Wall of Fame', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFD97706))),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 140,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: testimonials.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, idx) {
+              final t = testimonials[idx];
+              return Container(
+                width: 280,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.borderLight),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: AppColors.skyBlueLight,
+                          child: Text(
+                            t.initials,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: AppColors.skyBlue),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                t.studentName,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textLight),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (t.batchOrExam != null && t.batchOrExam!.isNotEmpty)
+                                Text(
+                                  t.batchOrExam!,
+                                  style: const TextStyle(fontSize: 10, color: AppColors.slate500),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ),
+                        ),
+                        Row(
+                          children: List.generate(
+                            t.rating,
+                            (_) => const Icon(Icons.star_rounded, size: 13, color: Color(0xFFF59E0B)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: Text(
+                        '"${t.quote}"',
+                        style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppColors.slate700, height: 1.35),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConnectWithUsSection(List<InstituteLinkModel> links) {
+    if (links.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 18),
+        const Text(
+          'Connect with us',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textLight),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.borderLight),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Official channels & communities:',
+                style: TextStyle(fontSize: 12, color: AppColors.slate500),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: links.map((link) {
+                  return InkWell(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: link.url));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${link.title} link copied to clipboard!\n${link.url}'),
+                          backgroundColor: AppColors.skyBlue,
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: link.brandColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: link.brandColor.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(link.iconData, size: 16, color: link.brandColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            link.title,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: link.brandColor,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(Icons.open_in_new, size: 12, color: link.brandColor.withValues(alpha: 0.7)),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
