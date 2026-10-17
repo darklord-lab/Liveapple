@@ -69,7 +69,7 @@ class _DocumentViewerState extends State<DocumentViewer> {
           fileName: file.name,
           author: 'Teacher (Local File)',
           type: isPdf ? 'PDF Document' : 'PPT Presentation',
-          slides: const [
+          slides: [
             PresentationPage(
               pageNumber: 1,
               title: file.name,
