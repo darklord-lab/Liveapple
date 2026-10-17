@@ -1,7 +1,7 @@
 import http from 'http';
 import { Server } from 'socket.io';
 import { createApp } from './app.js';
-import { env } from './config/env.js';
+import { env, validateLiveKitOnStartup } from './config/env.js';
 import { initializePrisma } from './utils/prisma.js';
 
 import { setupSocketGateway } from './gateway/socket.js';
@@ -56,7 +56,7 @@ async function bootstrap() {
     console.log(`   http://localhost:${PORT}`);
     console.log(`   Environment: ${env.NODE_ENV}`);
     console.log(`   Database: SQLite + Prisma ORM (WAL + FK ON)`);
-    console.log(`   LiveKit SFU Configured: ${env.LIVEKIT_URL}`);
+    validateLiveKitOnStartup();
     console.log(`======================================================\n`);
 
     // Start self-ping keep-alive only in production when APP_URL is configured

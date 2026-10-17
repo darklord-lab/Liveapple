@@ -4,7 +4,7 @@ import { logAudit } from './audit.service.js';
 import { LiveKitService } from './livekit.service.js';
 import { NotificationService } from './notification.service.js';
 import { emitToUser, emitToInstitute } from '../gateway/socket.js';
-import { env } from '../config/env.js';
+import { env, getLiveKitStatus } from '../config/env.js';
 
 export interface CreateClassInput {
   batchId: string;
@@ -325,6 +325,12 @@ export class LiveClassService {
           studentId: user.id,
         },
       });
+    }
+
+    // Verify LiveKit configuration in production
+    const lkStatus = getLiveKitStatus();
+    if (env.NODE_ENV === 'production' && !lkStatus.configured) {
+      throw new AppError('LIVEKIT_NOT_CONFIGURED', 'Video server abhi set nahi hua', 503);
     }
 
     // Generate signed LiveKit JWT

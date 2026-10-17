@@ -4,6 +4,7 @@ services:
     runtime: node
     rootDir: apps/api
     plan: free
+    healthCheckPath: /api/health
     buildCommand: npm install && npx prisma generate && npx prisma db push && npm run db:reset-demo
     startCommand: npm run start
     envVars:
@@ -25,9 +26,10 @@ services:
         value: "48"
       - key: CORS_ORIGINS
         value: "*"
+      # Set in the Render dashboard: URL must start with wss://, from a LiveKit Cloud project. Never commit real values.
       - key: LIVEKIT_URL
-        value: http://localhost:7880
+        sync: false
       - key: LIVEKIT_API_KEY
-        value: devkey
+        sync: false
       - key: LIVEKIT_API_SECRET
-        value: secret
+        sync: false

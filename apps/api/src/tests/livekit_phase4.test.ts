@@ -4,6 +4,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { createApp } from '../app.js';
 import { initializePrisma, prisma } from '../utils/prisma.js';
+import { env } from '../config/env.js';
 
 describe('Phase 4 — Live Class & LiveKit SFU Suite', () => {
   const app = createApp();
@@ -167,4 +168,154 @@ describe('Phase 4 — Live Class & LiveKit SFU Suite', () => {
     assert.equal(res.status, 200);
     assert.equal(res.body.status, 'ENDED');
   });
+
+  describe('LiveKit Env Hardening & Degraded Mode Suite', () => {
+    it('GET /api/health - includes livekit status without leaking secrets', async () => {
+      const res = await request(app).get('/api/health');
+      assert.equal(res.status, 200);
+      assert.equal(res.body.status, 'ok');
+      assert.ok(res.body.livekit);
+      assert.equal(typeof res.body.livekit.configured, 'boolean');
+      assert.equal(typeof res.body.livekit.urlIsWss, 'boolean');
+      assert.equal(typeof res.body.livekit.usingDefaultKeys, 'boolean');
+      // Verify no secrets leaked
+      assert.equal((res.body.livekit as any).apiKey, undefined);
+      assert.equal((res.body.livekit as any).apiSecret, undefined);
+      assert.equal((res.body.livekit as any).secret, undefined);
+    });
+
+    it('Production mode: rejects dead localhost URL with 503 LIVEKIT_NOT_CONFIGURED', async () => {
+      const prevNodeEnv = env.NODE_ENV;
+      const prevUrl = env.LIVEKIT_URL;
+      const prevKey = env.LIVEKIT_API_KEY;
+      const prevSecret = env.LIVEKIT_API_SECRET;
+
+      try {
+        (env as any).NODE_ENV = 'production';
+        (env as any).LIVEKIT_URL = 'http://localhost:7880';
+        (env as any).LIVEKIT_API_KEY = 'valid_key_12345';
+        (env as any).LIVEKIT_API_SECRET = 'valid_secret_12345_secure_key';
+
+        const healthRes = await request(app).get('/api/health');
+        assert.equal(healthRes.body.livekit.configured, false);
+        assert.equal(healthRes.body.livekit.urlIsWss, false);
+
+        const tokenRes = await request(app)
+          .post(`/api/v1/classes/${testClassId}/token`)
+          .set('Authorization', `Bearer ${teacherToken}`);
+
+        assert.equal(tokenRes.status, 503);
+        assert.equal(tokenRes.body.code, 'LIVEKIT_NOT_CONFIGURED');
+        assert.equal(tokenRes.body.message, 'Video server abhi set nahi hua');
+      } finally {
+        (env as any).NODE_ENV = prevNodeEnv;
+        (env as any).LIVEKIT_URL = prevUrl;
+        (env as any).LIVEKIT_API_KEY = prevKey;
+        (env as any).LIVEKIT_API_SECRET = prevSecret;
+      }
+    });
+
+    it('Production mode: rejects default keys (devkey/secret) even with wss URL', async () => {
+      const prevNodeEnv = env.NODE_ENV;
+      const prevUrl = env.LIVEKIT_URL;
+      const prevKey = env.LIVEKIT_API_KEY;
+      const prevSecret = env.LIVEKIT_API_SECRET;
+
+      try {
+        (env as any).NODE_ENV = 'production';
+        (env as any).LIVEKIT_URL = 'wss://liveapple.livekit.cloud';
+        (env as any).LIVEKIT_API_KEY = 'devkey';
+        (env as any).LIVEKIT_API_SECRET = 'secret';
+
+        const healthRes = await request(app).get('/api/health');
+        assert.equal(healthRes.body.livekit.configured, false);
+        assert.equal(healthRes.body.livekit.usingDefaultKeys, true);
+
+        const tokenRes = await request(app)
+          .post(`/api/v1/classes/${testClassId}/token`)
+          .set('Authorization', `Bearer ${teacherToken}`);
+
+        assert.equal(tokenRes.status, 503);
+        assert.equal(tokenRes.body.code, 'LIVEKIT_NOT_CONFIGURED');
+      } finally {
+        (env as any).NODE_ENV = prevNodeEnv;
+        (env as any).LIVEKIT_URL = prevUrl;
+        (env as any).LIVEKIT_API_KEY = prevKey;
+        (env as any).LIVEKIT_API_SECRET = prevSecret;
+      }
+    });
+
+    it('Production mode: succeeds when valid wss URL and non-default keys are provided', async () => {
+      const prevNodeEnv = env.NODE_ENV;
+      const prevUrl = env.LIVEKIT_URL;
+      const prevKey = env.LIVEKIT_API_KEY;
+      const prevSecret = env.LIVEKIT_API_SECRET;
+
+      try {
+        (env as any).NODE_ENV = 'production';
+        (env as any).LIVEKIT_URL = 'wss://liveapple-prod.livekit.cloud';
+        (env as any).LIVEKIT_API_KEY = 'APIprod_valid_key_999';
+        (env as any).LIVEKIT_API_SECRET = 'SECRET_valid_secure_secret_prod_888';
+
+        const healthRes = await request(app).get('/api/health');
+        assert.equal(healthRes.body.livekit.configured, true);
+        assert.equal(healthRes.body.livekit.urlIsWss, true);
+        assert.equal(healthRes.body.livekit.usingDefaultKeys, false);
+        assert.equal(healthRes.body.livekit.urlHost, 'liveapple-prod.livekit.cloud');
+
+        const tokenRes = await request(app)
+          .post(`/api/v1/classes/${testClassId}/token`)
+          .set('Authorization', `Bearer ${teacherToken}`);
+
+        assert.equal(tokenRes.status, 200);
+        assert.ok(tokenRes.body.token);
+        assert.equal(tokenRes.body.serverUrl, 'wss://liveapple-prod.livekit.cloud');
+      } finally {
+        (env as any).NODE_ENV = prevNodeEnv;
+        (env as any).LIVEKIT_URL = prevUrl;
+        (env as any).LIVEKIT_API_KEY = prevKey;
+        (env as any).LIVEKIT_API_SECRET = prevSecret;
+      }
+    });
+
+    it('Degraded mode does NOT crash other routes: login and timetable continue to work', async () => {
+      const prevNodeEnv = env.NODE_ENV;
+      const prevUrl = env.LIVEKIT_URL;
+      const prevKey = env.LIVEKIT_API_KEY;
+      const prevSecret = env.LIVEKIT_API_SECRET;
+
+      try {
+        (env as any).NODE_ENV = 'production';
+        (env as any).LIVEKIT_URL = 'http://localhost:7880';
+        (env as any).LIVEKIT_API_KEY = 'devkey';
+        (env as any).LIVEKIT_API_SECRET = 'secret';
+
+        // Login still works
+        const loginRes = await request(app).post('/api/v1/auth/login').send({
+          email: 'teacher1@apex.edu',
+          password: 'Password@123',
+        });
+        assert.equal(loginRes.status, 200);
+        assert.ok(loginRes.body.accessToken);
+
+        // Timetable still works
+        const timetableRes = await request(app)
+          .get('/api/v1/timetable')
+          .set('Authorization', `Bearer ${teacherToken}`);
+        assert.equal(timetableRes.status, 200);
+
+        // Batches still work
+        const batchesRes = await request(app)
+          .get('/api/v1/batches')
+          .set('Authorization', `Bearer ${teacherToken}`);
+        assert.equal(batchesRes.status, 200);
+      } finally {
+        (env as any).NODE_ENV = prevNodeEnv;
+        (env as any).LIVEKIT_URL = prevUrl;
+        (env as any).LIVEKIT_API_KEY = prevKey;
+        (env as any).LIVEKIT_API_SECRET = prevSecret;
+      }
+    });
+  });
 });
+
