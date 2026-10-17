@@ -4,10 +4,26 @@ import argon2 from 'argon2';
 const prisma = new PrismaClient();
 
 async function resetDemo() {
-  // B4. Guard against running in production
-  if (process.env.NODE_ENV === 'production' && process.env.FORCE_DEMO_RESET !== 'true') {
-    console.error('❌ Refusing to run db:reset-demo in production environment! Set FORCE_DEMO_RESET=true to override.');
-    process.exit(1);
+  // 3.1 Guard against running in production
+  if (process.env.NODE_ENV === 'production') {
+    if (process.env.ALLOW_DESTRUCTIVE_DEMO_RESET !== 'true') {
+      console.error('❌ Refusing to run db:reset-demo in production environment! Set ALLOW_DESTRUCTIVE_DEMO_RESET=true to override.');
+      process.exit(1);
+    }
+    // Never touch a DB that has real non-demo records
+    const nonDemoUserCount = await prisma.user.count({
+      where: {
+        email: { not: { endsWith: '@apex.edu' } },
+      },
+    });
+    if (nonDemoUserCount > 0) {
+      console.error(`❌ Refusing to reset DB in production: Found ${nonDemoUserCount} real non-demo users!`);
+      process.exit(1);
+    }
+    if (process.env.ALLOW_DEMO_USERS !== 'true') {
+      console.log('ℹ️ ALLOW_DEMO_USERS is false in production: Skipping demo user creation.');
+      return;
+    }
   }
 
   console.log('🌱 Starting Classora 2.0 Demo Reset & Seeding (Clean Data Hygiene)...');

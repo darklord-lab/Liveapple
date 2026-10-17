@@ -11,6 +11,7 @@ node_modules/
 # Build Outputs
 dist/
 !apps/api/admin-dist/**
+!apps/api/web-dist/**
 !_archive/admin/dist/**
 build/
 .dart_tool/

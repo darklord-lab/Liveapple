@@ -453,10 +453,8 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                       if (roomState.isHost)
                         ElevatedButton.icon(
                           onPressed: () {
-                            ref.read(liveClassRoomProvider.notifier).muteAll();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('All participants muted')),
-                            );
+                            ref.read(liveClassRoomProvider.notifier).muteAll(lock: true);
+                            _showToast(context, 'All student microphones muted and locked');
                           },
                           icon: const Icon(Icons.mic_off, size: 14),
                           label: const Text('Mute All', style: TextStyle(fontSize: 11)),
@@ -604,19 +602,22 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                                         onSelected: (action) {
                                           if (action == 'remove') {
                                             ref.read(liveClassRoomProvider.notifier).removeParticipant(p.identity);
+                                          } else if (action == 'allowSpeak') {
+                                            ref.read(liveClassRoomProvider.notifier).allowStudentToSpeak(p.identity);
+                                            _showToast(context, 'Granted speaking rights to ${p.name}');
                                           } else if (action == 'grantBoard') {
                                             ref.read(liveClassRoomProvider.notifier).grantBoardToStudent(p.identity);
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(content: Text('Allowed ${p.name} to draw on board')),
-                                            );
+                                            _showToast(context, 'Allowed ${p.name} to draw on board');
                                           } else if (action == 'revokeBoard') {
                                             ref.read(liveClassRoomProvider.notifier).revokeBoardFromStudent(p.identity);
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(content: Text('Revoked board drawing from ${p.name}')),
-                                            );
+                                            _showToast(context, 'Revoked board drawing from ${p.name}');
                                           }
                                         },
                                         itemBuilder: (ctx) => [
+                                          const PopupMenuItem(
+                                            value: 'allowSpeak',
+                                            child: Text('Allow Mic / Unmute', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                          ),
                                           const PopupMenuItem(
                                             value: 'grantBoard',
                                             child: Text('Allow Board Draw', style: TextStyle(color: Colors.white, fontSize: 12)),
@@ -644,6 +645,268 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
           },
         );
       },
+    );
+  }
+
+  void _showToast(BuildContext context, String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(bottom: 74, left: 16, right: 16),
+        duration: const Duration(seconds: 2),
+        backgroundColor: const Color(0xFF334155),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  void _showPresentMenu(BuildContext context, LiveClassRoomState roomState) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Present to Classroom',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppColors.slate400),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const Divider(color: Color(0xFF334155)),
+              ListTile(
+                leading: Icon(
+                  Icons.draw_outlined,
+                  color: roomState.isWhiteboardOpen ? AppColors.primary : Colors.white,
+                ),
+                title: Text(
+                  roomState.isWhiteboardOpen ? 'Close Digital Whiteboard' : 'Open Digital Whiteboard',
+                  style: TextStyle(
+                    color: roomState.isWhiteboardOpen ? AppColors.primary : Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  roomState.isWhiteboardOpen
+                      ? 'Currently active on stage. Tap to return to video grid.'
+                      : 'Draw formulas, diagrams, and notes with live sync to all students',
+                  style: const TextStyle(color: AppColors.slate400, fontSize: 11),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  ref.read(liveClassRoomProvider.notifier).toggleWhiteboard();
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  roomState.isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
+                  color: roomState.isScreenSharing ? AppColors.skyBlue : Colors.white,
+                ),
+                title: Text(
+                  roomState.isScreenSharing ? 'Stop Screen Share' : 'Share Screen',
+                  style: TextStyle(
+                    color: roomState.isScreenSharing ? AppColors.skyBlue : Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  roomState.isScreenSharing
+                      ? 'Currently sharing your screen with class'
+                      : 'Broadcast your phone screen or browser window to all students',
+                  style: const TextStyle(color: AppColors.slate400, fontSize: 11),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  ref.read(liveClassRoomProvider.notifier).toggleScreenShare();
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  roomState.isDocPresenting ? Icons.slideshow : Icons.picture_as_pdf_outlined,
+                  color: roomState.isDocPresenting ? AppColors.primary : Colors.white,
+                ),
+                title: Text(
+                  roomState.isDocPresenting ? 'Stop Notes / Slides' : 'Present Notes / PDF / PPT',
+                  style: TextStyle(
+                    color: roomState.isDocPresenting ? AppColors.primary : Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  roomState.isDocPresenting
+                      ? 'Currently presenting Physics_Chapter_4_Wave_Optics.pdf'
+                      : 'Present lecture notes and synchronized PDF slides',
+                  style: const TextStyle(color: AppColors.slate400, fontSize: 11),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  final next = !roomState.isDocPresenting;
+                  ref.read(liveClassRoomProvider.notifier).setDocPresentation(
+                    isOpen: next,
+                    title: next ? 'Physics_Chapter_4_Wave_Optics.pdf' : '',
+                    page: 1,
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showDebugOverlay(BuildContext context, LiveClassRoomState roomState) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0F172A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Live Classroom Diagnostics',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.slate400),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const Divider(color: Color(0xFF334155)),
+                _buildDebugRow('Server Commit', roomState.serverBuildCommit ?? 'Unknown / Local'),
+                _buildDebugRow('Server Built At', roomState.serverBuildTime ?? 'Unknown'),
+                _buildDebugRow('Class ID', roomState.liveClass?.id ?? widget.classId),
+                _buildDebugRow('Role / Host', roomState.isHost ? 'TEACHER (Host)' : 'STUDENT'),
+                _buildDebugRow('Connection State', roomState.connectionState),
+                _buildDebugRow('Current Stage', roomState.stage),
+                _buildDebugRow('Mic Locked by Host', roomState.isMicLocked ? 'YES' : 'NO'),
+                _buildDebugRow('Participants Count', '${roomState.participants.length}'),
+                _buildDebugRow('Video Tracks Count', '${roomState.remoteVideoTracks.length}'),
+                _buildDebugRow('Token Grants', '${roomState.tokenGrants ?? "None"}'),
+                if (roomState.lastLiveKitError != null)
+                  _buildDebugRow('Last LiveKit Error', roomState.lastLiveKitError!, isError: true),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDebugRow(String label, String value, {bool isError = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: AppColors.slate400, fontSize: 11, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              color: isError ? AppColors.error : Colors.white,
+              fontSize: 12,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeacherPip(LiveClassRoomState roomState) {
+    lk.VideoTrack? teacherTrack;
+    if (roomState.isHost) {
+      if (!roomState.isCameraOff && roomState.localVideoTrack != null) {
+        teacherTrack = roomState.localVideoTrack;
+      }
+    } else {
+      final hostP = roomState.participants.firstWhere(
+        (p) => p.isHost || p.role == 'TEACHER',
+        orElse: () => ClassParticipant(identity: '', name: '', role: ''),
+      );
+      if (hostP.identity.isNotEmpty && roomState.remoteVideoTracks.containsKey(hostP.identity)) {
+        teacherTrack = roomState.remoteVideoTracks[hostP.identity];
+      } else if (roomState.remoteVideoTracks.isNotEmpty) {
+        teacherTrack = roomState.remoteVideoTracks.values.first;
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black87,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.primary, width: 1.5),
+        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 6)],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          if (teacherTrack != null)
+            Positioned.fill(
+              child: lk.VideoTrackRenderer(
+                teacherTrack,
+                fit: lk.VideoViewFit.cover,
+              ),
+            )
+          else
+            const Center(
+              child: Icon(Icons.person, color: AppColors.slate400, size: 36),
+            ),
+          Positioned(
+            bottom: 4,
+            left: 4,
+            right: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                roomState.liveClass?.teacherName ?? 'Teacher',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -675,7 +938,50 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                 ],
               ),
               const Divider(color: Color(0xFF334155)),
-              if (!roomState.isHost) ...[
+              if (roomState.isHost) ...[
+                ListTile(
+                  leading: const Icon(Icons.mic_off, color: AppColors.error),
+                  title: const Text('Mute All Students', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Mute and lock microphones of all students', style: TextStyle(color: AppColors.slate400, fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    ref.read(liveClassRoomProvider.notifier).muteAll(lock: true);
+                    _showToast(context, 'All student microphones muted and locked');
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.mic, color: AppColors.success),
+                  title: const Text('Unlock Student Mics', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Allow students to unmute their microphones', style: TextStyle(color: AppColors.slate400, fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    ref.read(liveClassRoomProvider.notifier).unlockMics();
+                    _showToast(context, 'Student microphones unlocked');
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    roomState.isRoomLocked ? Icons.lock : Icons.lock_open,
+                    color: roomState.isRoomLocked ? AppColors.warning : Colors.white,
+                  ),
+                  title: Text(
+                    roomState.isRoomLocked ? 'Unlock Classroom' : 'Lock Classroom',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    roomState.isRoomLocked ? 'New students cannot enter until unlocked' : 'Prevent new entries into session',
+                    style: const TextStyle(color: AppColors.slate400, fontSize: 11),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    ref.read(liveClassRoomProvider.notifier).toggleLockRoom();
+                    _showToast(
+                      context,
+                      roomState.isRoomLocked ? 'Classroom unlocked' : 'Classroom locked to new entries',
+                    );
+                  },
+                ),
+              ] else ...[
                 ListTile(
                   leading: Icon(
                     roomState.isHandRaised ? Icons.pan_tool : Icons.pan_tool_outlined,
@@ -706,56 +1012,6 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                     _showChatDrawer();
                   },
                 ),
-                ListTile(
-                  leading: const Icon(Icons.picture_as_pdf_rounded, color: AppColors.primary),
-                  title: const Text('Present Notes / PDF / PPT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Present slides and lecture documents synchronously with students', style: TextStyle(color: AppColors.slate400, fontSize: 11)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    ref.read(liveClassRoomProvider.notifier).setDocPresentation(
-                      isOpen: !roomState.isDocPresenting,
-                      title: 'Physics_Chapter_4_Wave_Optics.pdf',
-                      page: 1,
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.mic_off, color: AppColors.error),
-                  title: const Text('Mute All Students', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Mute everyone currently in the room', style: TextStyle(color: AppColors.slate400, fontSize: 11)),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    ref.read(liveClassRoomProvider.notifier).muteAll();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('All participants muted')),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    roomState.isRoomLocked ? Icons.lock : Icons.lock_open,
-                    color: roomState.isRoomLocked ? AppColors.warning : Colors.white,
-                  ),
-                  title: Text(
-                    roomState.isRoomLocked ? 'Unlock Classroom' : 'Lock Classroom',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(
-                    roomState.isRoomLocked ? 'New students cannot enter until unlocked' : 'Prevent new entries into session',
-                    style: const TextStyle(color: AppColors.slate400, fontSize: 11),
-                  ),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    ref.read(liveClassRoomProvider.notifier).toggleLockRoom();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          roomState.isRoomLocked ? 'Classroom unlocked' : 'Classroom locked to new entries',
-                        ),
-                      ),
-                    );
-                  },
-                ),
               ],
               ListTile(
                 key: const Key('enter_pip_menu_tile'),
@@ -765,6 +1021,15 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                 onTap: () {
                   Navigator.pop(ctx);
                   _enterPip();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline, color: AppColors.slate400),
+                title: const Text('Classroom Diagnostics', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                subtitle: const Text('View server commit, room tokens and stats', style: TextStyle(color: AppColors.slate400, fontSize: 11)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showDebugOverlay(context, roomState);
                 },
               ),
               const SizedBox(height: 8),
@@ -779,12 +1044,7 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
     final pipService = ref.read(pipServiceProvider);
     final entered = await pipService.enterPip(width: 16, height: 9);
     if (!entered && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Picture-in-Picture is not supported on this device/platform'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      _showToast(context, 'Picture-in-Picture is not supported on this device/platform');
     }
   }
 
@@ -922,12 +1182,26 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
             // Main Stage Area (Whiteboard, Document Viewer, or Meet-like Video Stage)
             Expanded(
               child: roomState.isWhiteboardOpen
-                  ? DigitalBoard(
-                      isTeacher: roomState.isHost || roomState.isBoardAllowed,
-                      onDrawStroke: (stroke) => ref.read(liveClassRoomProvider.notifier).sendDrawStroke(stroke),
-                      onClearBoard: () => ref.read(liveClassRoomProvider.notifier).sendClearBoard(),
-                      remoteDrawStream: ref.read(liveClassRoomProvider.notifier).remoteDrawStream,
-                      remoteClearStream: ref.read(liveClassRoomProvider.notifier).remoteClearStream,
+                  ? Stack(
+                      children: [
+                        Positioned.fill(
+                          child: DigitalBoard(
+                            isTeacher: roomState.isHost || roomState.isBoardAllowed,
+                            onDrawStroke: (stroke) => ref.read(liveClassRoomProvider.notifier).sendDrawStroke(stroke),
+                            onClearBoard: () => ref.read(liveClassRoomProvider.notifier).sendClearBoard(),
+                            remoteDrawStream: ref.read(liveClassRoomProvider.notifier).remoteDrawStream,
+                            remoteClearStream: ref.read(liveClassRoomProvider.notifier).remoteClearStream,
+                          ),
+                        ),
+                        // Teacher camera PiP overlay over board (Stage 1.3)
+                        Positioned(
+                          top: 10,
+                          right: 10,
+                          width: 100,
+                          height: 125,
+                          child: _buildTeacherPip(roomState),
+                        ),
+                      ],
                     )
                   : (roomState.isDocPresenting
                       ? DocumentViewer(
@@ -1026,25 +1300,29 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
           ),
           const SizedBox(width: 10),
 
-          // Title & Batch Info (with ellipsis for overflow safety at 320/360 dp)
+          // Title & Batch Info (with ellipsis for overflow safety at 320/360 dp, long press for debug overlay)
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  liveClass?.title ?? 'Live Class',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-                Text(
-                  '${liveClass?.batchName ?? 'Batch'} • Host: ${liveClass?.teacherName ?? 'Teacher'}',
-                  style: const TextStyle(color: AppColors.slate400, fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-              ],
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onLongPress: () => _showDebugOverlay(context, roomState),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    liveClass?.title ?? 'Live Class',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                  Text(
+                    '${liveClass?.batchName ?? 'Batch'} • Host: ${liveClass?.teacherName ?? 'Teacher'}',
+                    style: const TextStyle(color: AppColors.slate400, fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ],
+              ),
             ),
           ),
 
@@ -1539,7 +1817,7 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
     );
   }
 
-  // Google Meet Style Bottom Bar (8 Controls)
+  // Google Meet Style Bottom Bar (7 Controls for Teacher, 7 Controls for Student)
   Widget _buildControlsBar(LiveClassRoomState roomState, String userName) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -1558,7 +1836,13 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
               label: roomState.isMicMuted ? 'Unmute' : 'Mute',
               isActive: !roomState.isMicMuted,
               color: roomState.isMicMuted ? AppColors.error : AppColors.slate100,
-              onTap: () => ref.read(liveClassRoomProvider.notifier).toggleMic(),
+              onTap: () {
+                if (!roomState.isHost && roomState.isMicLocked) {
+                  _showToast(context, 'The host has locked student microphones. Raise hand to speak.');
+                  return;
+                }
+                ref.read(liveClassRoomProvider.notifier).toggleMic();
+              },
             ),
 
             // 2. Camera Toggle
@@ -1570,14 +1854,16 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
               onTap: () => ref.read(liveClassRoomProvider.notifier).toggleCamera(),
             ),
 
-            // 3. Share Screen (Teacher) or Raise Hand (Student)
+            // 3. Present (Teacher) or Raise Hand (Student)
             if (roomState.isHost)
               _buildControlButton(
-                icon: roomState.isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
-                label: roomState.isScreenSharing ? 'Stop Share' : 'Share Screen',
-                isActive: roomState.isScreenSharing,
-                color: roomState.isScreenSharing ? AppColors.skyBlue : AppColors.slate100,
-                onTap: () => ref.read(liveClassRoomProvider.notifier).toggleScreenShare(),
+                icon: Icons.present_to_all,
+                label: 'Present',
+                isActive: roomState.isWhiteboardOpen || roomState.isScreenSharing || roomState.isDocPresenting,
+                color: (roomState.isWhiteboardOpen || roomState.isScreenSharing || roomState.isDocPresenting)
+                    ? AppColors.primary
+                    : AppColors.slate100,
+                onTap: () => _showPresentMenu(context, roomState),
               )
             else
               _buildControlButton(
@@ -1588,33 +1874,7 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                 onTap: () => ref.read(liveClassRoomProvider.notifier).toggleHandRaise(userName),
               ),
 
-            // 4. Board (Toggle Digital Whiteboard)
-            _buildControlButton(
-              icon: Icons.draw_outlined,
-              label: roomState.isWhiteboardOpen ? 'Close Board' : 'Board',
-              isActive: roomState.isWhiteboardOpen,
-              color: roomState.isWhiteboardOpen ? AppColors.primary : AppColors.slate100,
-              onTap: () => ref.read(liveClassRoomProvider.notifier).toggleWhiteboard(),
-            ),
-
-            // 4b. Present Doc / PDF / PPT (Teacher only)
-            if (roomState.isHost)
-              _buildControlButton(
-                icon: roomState.isDocPresenting ? Icons.slideshow : Icons.picture_as_pdf_outlined,
-                label: roomState.isDocPresenting ? 'Stop Doc' : 'Notes/PDF',
-                isActive: roomState.isDocPresenting,
-                color: roomState.isDocPresenting ? AppColors.primary : AppColors.slate100,
-                onTap: () {
-                  final next = !roomState.isDocPresenting;
-                  ref.read(liveClassRoomProvider.notifier).setDocPresentation(
-                    isOpen: next,
-                    title: next ? 'Physics_Chapter_4_Wave_Optics.pdf' : '',
-                    page: 1,
-                  );
-                },
-              ),
-
-            // 5. Chat Button with Unread Badge
+            // 4. Chat Button with Unread Badge
             Stack(
               clipBehavior: Clip.none,
               children: [
@@ -1645,7 +1905,7 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
               ],
             ),
 
-            // 6. Participants Sheet
+            // 5. Participants Sheet
             _buildControlButton(
               icon: Icons.people_outline,
               label: 'People (${roomState.participants.length})',
@@ -1653,7 +1913,7 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
               onTap: _showParticipantsDrawer,
             ),
 
-            // 7. More Options (Raise hand / polls / mute all / lock room)
+            // 6. More Options
             _buildControlButton(
               icon: Icons.more_horiz,
               label: 'More',
@@ -1661,7 +1921,7 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
               onTap: () => _showMoreActionsSheet(roomState, userName),
             ),
 
-            // 8. Call End / Leave button
+            // 7. Call End / Leave button
             _buildControlButton(
               icon: Icons.call_end,
               label: roomState.isHost ? 'End Class' : 'Leave',

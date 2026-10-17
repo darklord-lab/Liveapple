@@ -231,6 +231,17 @@ export class LiveClassService {
       throw new AppError('FORBIDDEN', 'Only the assigned teacher can start this class', 403);
     }
 
+    // 3.1 Hardening: Starting a class ends the same teacher's other LIVE classes
+    await prisma.liveClass.updateMany({
+      where: {
+        instituteId,
+        teacherId: liveClass.teacherId,
+        status: 'LIVE',
+        id: { not: classId },
+      },
+      data: { status: 'ENDED' },
+    });
+
     const updated = await prisma.liveClass.update({
       where: { id: classId },
       data: { status: 'LIVE' },

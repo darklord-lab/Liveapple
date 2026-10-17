@@ -34,6 +34,12 @@ const roomBoardGrantedStudents = new Map<string, Set<string>>();
 const roomBoardStates = new Map<string, boolean>();
 const roomChatHistory = new Map<string, ChatMessage[]>();
 const hostDisconnectTimers = new Map<string, NodeJS.Timeout>();
+const roomStages = new Map<string, 'VIDEO' | 'SCREEN' | 'BOARD' | 'SLIDES'>();
+const roomBoardStrokes = new Map<string, any[]>();
+const roomDocStates = new Map<string, { isOpen: boolean; title?: string; page?: number; totalPages?: number }>();
+const roomMediaModes = new Map<string, 'OPEN' | 'HAND_RAISE_ONLY'>();
+const roomMicLocked = new Map<string, boolean>();
+const userClassSockets = new Map<string, string>(); // userId -> socketId
 
 let ioInstance: Server | null = null;
 
@@ -99,17 +105,47 @@ export function setupSocketGateway(io: Server) {
         hostDisconnectTimers.delete(data.classId);
       }
 
+      // 2.4 One device per user takeover: if same user already in class, disconnect previous device
+      const existingSocketId = userClassSockets.get(user.userId);
+      if (existingSocketId && existingSocketId !== socket.id) {
+        const oldSocket = io.sockets.sockets.get(existingSocketId);
+        if (oldSocket) {
+          oldSocket.emit('class:takeover', { reason: 'Aap dusre device se join ho gaye' });
+          oldSocket.leave(roomKey);
+        }
+      }
+      userClassSockets.set(user.userId, socket.id);
+
       // Send existing state to joined user
       const hands = roomHandQueues.get(data.classId) || [];
       const polls = roomActivePolls.get(data.classId) || [];
       const chatHistory = roomChatHistory.get(data.classId) || [];
       const isBoardOpen = roomBoardStates.get(data.classId) || false;
       const canDraw = isHost || (roomBoardGrantedStudents.get(data.classId)?.has(user.userId) ?? false);
+      const currentStage = roomStages.get(data.classId) || (isBoardOpen ? 'BOARD' : 'VIDEO');
+      const docState = roomDocStates.get(data.classId) || null;
+      const strokes = roomBoardStrokes.get(data.classId) || [];
+      const mediaMode = roomMediaModes.get(data.classId) || 'OPEN';
+      const isMicLocked = roomMicLocked.get(data.classId) || false;
+
+      socket.emit('classroom:snapshot', {
+        stage: currentStage,
+        mediaMode,
+        isMicLocked,
+        board: {
+          isOpen: isBoardOpen,
+          canDraw,
+          strokes,
+        },
+        doc: docState,
+      });
 
       socket.emit('hand:queue', { hands });
       socket.emit('poll:list', { polls });
       socket.emit('chat:history', { messages: chatHistory });
-      socket.emit('board:state', { isOpen: isBoardOpen, canDraw });
+      socket.emit('board:state', { isOpen: isBoardOpen, canDraw, strokes });
+      socket.emit('stage:changed', { stage: currentStage });
+      if (docState) socket.emit('doc:present', docState);
 
       // Notify others in room
       socket.to(roomKey).emit('peer:joined', {
@@ -152,6 +188,15 @@ export function setupSocketGateway(io: Server) {
       const canDraw = isHost || (roomBoardGrantedStudents.get(data.classId)?.has(user.userId) ?? false);
       if (!canDraw) return; // Enforce: reject unauthorized draw attempts
 
+      let strokes = roomBoardStrokes.get(data.classId);
+      if (!strokes) {
+        strokes = [];
+        roomBoardStrokes.set(data.classId, strokes);
+      }
+      if (strokes.length < 2000) {
+        strokes.push(data.stroke);
+      }
+
       socket.to(`class:${data.classId}`).emit('whiteboard:draw', data.stroke);
     });
 
@@ -159,6 +204,7 @@ export function setupSocketGateway(io: Server) {
       const canDraw = isHost || (roomBoardGrantedStudents.get(data.classId)?.has(user.userId) ?? false);
       if (!canDraw) return; // Enforce: reject unauthorized clear attempts
 
+      roomBoardStrokes.set(data.classId, []);
       socket.to(`class:${data.classId}`).emit('whiteboard:clear');
     });
 
@@ -171,17 +217,69 @@ export function setupSocketGateway(io: Server) {
       });
     });
 
+    // Stage sync: Teacher sets stage (VIDEO | SCREEN | BOARD | SLIDES)
+    socket.on('stage:set', (data: { classId: string; stage: 'VIDEO' | 'SCREEN' | 'BOARD' | 'SLIDES' }) => {
+      if (!isHost) return;
+      roomStages.set(data.classId, data.stage);
+      if (data.stage === 'BOARD') {
+        roomBoardStates.set(data.classId, true);
+        io.to(`class:${data.classId}`).emit('board:state', { isOpen: true, canDraw: isHost });
+      } else if (data.stage === 'SLIDES') {
+        roomBoardStates.set(data.classId, false);
+      } else {
+        roomBoardStates.set(data.classId, false);
+        io.to(`class:${data.classId}`).emit('board:state', { isOpen: false, canDraw: false });
+      }
+      io.to(`class:${data.classId}`).emit('stage:changed', { stage: data.stage });
+    });
+
     // Host toggles board open/close for all students
     socket.on('board:toggle', (data: { classId: string; isOpen: boolean }) => {
       if (!isHost) return;
       roomBoardStates.set(data.classId, data.isOpen);
+      roomStages.set(data.classId, data.isOpen ? 'BOARD' : 'VIDEO');
       io.to(`class:${data.classId}`).emit('board:state', { isOpen: data.isOpen });
+      io.to(`class:${data.classId}`).emit('stage:changed', { stage: data.isOpen ? 'BOARD' : 'VIDEO' });
     });
 
     // Host presents PPT/PDF document slides to all students
     socket.on('doc:present', (data: { classId: string; isOpen: boolean; title?: string; page?: number; totalPages?: number }) => {
       if (!isHost) return;
+      roomDocStates.set(data.classId, data);
+      if (data.isOpen) {
+        roomStages.set(data.classId, 'SLIDES');
+        io.to(`class:${data.classId}`).emit('stage:changed', { stage: 'SLIDES' });
+      } else if (roomStages.get(data.classId) === 'SLIDES') {
+        roomStages.set(data.classId, 'VIDEO');
+        io.to(`class:${data.classId}`).emit('stage:changed', { stage: 'VIDEO' });
+      }
       io.to(`class:${data.classId}`).emit('doc:present', data);
+    });
+
+    // Media mode & mic locks (OPEN | HAND_RAISE_ONLY)
+    socket.on('media:mode:set', (data: { classId: string; mode: 'OPEN' | 'HAND_RAISE_ONLY' }) => {
+      if (!isHost) return;
+      roomMediaModes.set(data.classId, data.mode);
+      io.to(`class:${data.classId}`).emit('media:mode:state', { mode: data.mode });
+    });
+
+    socket.on('host:muteAll', (data: { classId: string; lock?: boolean }) => {
+      if (!isHost) return;
+      if (data.lock) {
+        roomMicLocked.set(data.classId, true);
+      }
+      io.to(`class:${data.classId}`).emit('host:muted', { isLocked: !!data.lock });
+    });
+
+    socket.on('host:unlockMic', (data: { classId: string }) => {
+      if (!isHost) return;
+      roomMicLocked.set(data.classId, false);
+      io.to(`class:${data.classId}`).emit('host:unlocked');
+    });
+
+    socket.on('host:allowSpeak', (data: { classId: string; studentId: string }) => {
+      if (!isHost) return;
+      emitToUser(data.studentId, 'host:allowSpeak', { classId: data.classId });
     });
 
     // Host grants student drawing permission
@@ -454,4 +552,10 @@ export function resetSocketGatewayState(): void {
   roomBoardGrantedStudents.clear();
   roomBoardStates.clear();
   roomChatHistory.clear();
+  roomStages.clear();
+  roomBoardStrokes.clear();
+  roomDocStates.clear();
+  roomMediaModes.clear();
+  roomMicLocked.clear();
+  userClassSockets.clear();
 }

@@ -131,5 +131,14 @@ class LiveClassRepository {
       throw AppException(code: 'REMOVE_PARTICIPANT_ERROR', message: e.message ?? 'Failed to remove participant');
     }
   }
+
+  Future<Map<String, dynamic>> getHealth() async {
+    try {
+      final response = await _apiClient.dio.get('/health');
+      return response.data as Map<String, dynamic>;
+    } catch (_) {
+      return {};
+    }
+  }
 }
 

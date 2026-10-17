@@ -120,8 +120,9 @@ describe('Phase 4 — Live Class & LiveKit SFU Suite', () => {
 
     const decoded: any = jwt.decode(res.body.token);
     assert.ok(decoded.video);
-    assert.equal(decoded.video.canSubscribe, true);
-    assert.equal(decoded.video.canPublish, false);
+    assert.equal(decoded.video.canPublish, true);
+    assert.deepEqual(decoded.video.canPublishSources, ['camera', 'microphone']);
+    assert.equal(decoded.video.canPublishSources.includes('screen_share'), false);
   });
 
   it('POST /api/v1/classes/:id/token - Non-enrolled student is rejected (403 FORBIDDEN)', async () => {

@@ -82,11 +82,11 @@ class _DocumentViewerState extends State<DocumentViewer> {
               formula: 'Status: Presenting to Classroom',
               diagramUrl: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800',
             ),
-            PresentationPage(
+            const PresentationPage(
               pageNumber: 2,
               title: 'Detailed Notes & Reference',
               subtitle: 'Slide 2 of presentation',
-              points: const [
+              points: [
                 'All joined students view this presentation simultaneously',
                 'Interactive formulas and lecture notes displayed',
                 'Real-time pagination synced with teacher',

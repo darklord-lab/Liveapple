@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
@@ -111,6 +112,12 @@ class LiveClassRoomState {
   final lk.LocalAudioTrack? localAudioTrack;
   final Map<String, lk.VideoTrack> remoteVideoTracks;
   final lk.VideoTrack? remoteScreenShareTrack;
+  final String? serverBuildCommit;
+  final String? serverBuildTime;
+  final Map<String, dynamic>? tokenGrants;
+  final String? lastLiveKitError;
+  final bool isMicLocked;
+  final String stage;
 
   LiveClassRoomState({
     this.liveClass,
@@ -140,6 +147,12 @@ class LiveClassRoomState {
     this.localAudioTrack,
     this.remoteVideoTracks = const {},
     this.remoteScreenShareTrack,
+    this.serverBuildCommit,
+    this.serverBuildTime,
+    this.tokenGrants,
+    this.lastLiveKitError,
+    this.isMicLocked = false,
+    this.stage = 'VIDEO',
   });
 
   LiveClassRoomState copyWith({
@@ -170,6 +183,12 @@ class LiveClassRoomState {
     lk.LocalAudioTrack? localAudioTrack,
     Map<String, lk.VideoTrack>? remoteVideoTracks,
     lk.VideoTrack? remoteScreenShareTrack,
+    String? serverBuildCommit,
+    String? serverBuildTime,
+    Map<String, dynamic>? tokenGrants,
+    String? lastLiveKitError,
+    bool? isMicLocked,
+    String? stage,
     bool clearLocalVideo = false,
     bool clearLocalAudio = false,
     bool clearRemoteScreenShare = false,
@@ -202,6 +221,12 @@ class LiveClassRoomState {
       localAudioTrack: clearLocalAudio ? null : (localAudioTrack ?? this.localAudioTrack),
       remoteVideoTracks: remoteVideoTracks ?? this.remoteVideoTracks,
       remoteScreenShareTrack: clearRemoteScreenShare ? null : (remoteScreenShareTrack ?? this.remoteScreenShareTrack),
+      serverBuildCommit: serverBuildCommit ?? this.serverBuildCommit,
+      serverBuildTime: serverBuildTime ?? this.serverBuildTime,
+      tokenGrants: tokenGrants ?? this.tokenGrants,
+      lastLiveKitError: lastLiveKitError ?? this.lastLiveKitError,
+      isMicLocked: isMicLocked ?? this.isMicLocked,
+      stage: stage ?? this.stage,
     );
   }
 }
@@ -247,6 +272,29 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
       final livekitToken = tokenData['token'] as String? ?? '';
       final livekitServerUrl = tokenData['serverUrl'] as String? ?? '';
       final classDetails = await _repository.getClassById(classId);
+
+      // Decode token payload to inspect grants (canPublish, canPublishSources)
+      Map<String, dynamic>? grants;
+      try {
+        final parts = livekitToken.split('.');
+        if (parts.length >= 2) {
+          final normalized = base64Url.normalize(parts[1]);
+          final decodedPayload = json.decode(utf8.decode(base64Url.decode(normalized))) as Map<String, dynamic>;
+          grants = decodedPayload['video'] as Map<String, dynamic>?;
+        }
+      } catch (e) {
+        debugPrint('[TOKEN] Decode error: $e');
+      }
+
+      // Fetch server build info from /health
+      String? serverCommit;
+      String? serverBuiltAt;
+      try {
+        final healthRes = await _repository.getHealth();
+        final build = healthRes['build'] as Map<String, dynamic>?;
+        serverCommit = build?['commit']?.toString();
+        serverBuiltAt = build?['builtAt']?.toString();
+      } catch (_) {}
 
       // Initial local participant
       final localUserId = currentUserId ?? (isHost ? (classDetails.teacherId ?? 'local_host') : 'local_student');
@@ -302,6 +350,9 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
         participants: participantsList,
         localVideoTrack: videoTrack,
         localAudioTrack: audioTrack,
+        serverBuildCommit: serverCommit,
+        serverBuildTime: serverBuiltAt,
+        tokenGrants: grants,
       );
 
       // Connect to Socket.IO for realtime chat, hand queue, and room events
@@ -472,18 +523,73 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
         }
       });
 
+      // 6b. Snapshot on join/reconnect
+      _socket?.on('classroom:snapshot', (data) {
+        if (data is Map) {
+          final stage = data['stage']?.toString() ?? 'VIDEO';
+          final isLocked = data['isMicLocked'] == true;
+          final boardData = data['board'] as Map?;
+          final isBoardOpen = boardData?['isOpen'] == true;
+          final docData = data['doc'] as Map?;
+          state = state.copyWith(
+            stage: stage,
+            isMicLocked: isLocked,
+            isWhiteboardOpen: isBoardOpen,
+            isDocPresenting: docData != null && docData['isOpen'] == true,
+            docTitle: docData?['title']?.toString() ?? '',
+            docPage: (docData?['page'] as num?)?.toInt() ?? 1,
+          );
+        }
+      });
+
+      // 6c. Device takeover (Stage 2.4)
+      _socket?.on('class:takeover', (data) {
+        final reason = (data is Map ? data['reason'] : null)?.toString() ?? 'Aap dusre device se join ho gaye';
+        state = state.copyWith(errorMessage: reason);
+        leaveRoom();
+      });
+
+      // 6d. Stage sync (Stage 1.2)
+      _socket?.on('stage:changed', (data) {
+        if (data is Map && data['stage'] != null) {
+          final st = data['stage'].toString();
+          state = state.copyWith(
+            stage: st,
+            isWhiteboardOpen: st == 'BOARD',
+            isDocPresenting: st == 'SLIDES',
+          );
+        }
+      });
+
       // 7. Host Muted All event
-      _socket?.on('host:muted', (_) {
+      _socket?.on('host:muted', (data) {
         if (!state.isHost) {
-          state = state.copyWith(isMicMuted: true);
+          final isLocked = (data is Map && data['isLocked'] == true);
+          state = state.copyWith(isMicMuted: true, isMicLocked: isLocked);
           state.localAudioTrack?.stop();
+        }
+      });
+
+      _socket?.on('host:unlocked', (_) {
+        if (!state.isHost) {
+          state = state.copyWith(isMicLocked: false);
+        }
+      });
+
+      _socket?.on('host:allowSpeak', (_) {
+        if (!state.isHost) {
+          state = state.copyWith(isMicLocked: false);
         }
       });
 
       // 8. Whiteboard Sync events
       _socket?.on('board:state', (data) {
         if (data is Map && data['isOpen'] is bool) {
-          state = state.copyWith(isWhiteboardOpen: data['isOpen'] as bool);
+          final isOpen = data['isOpen'] as bool;
+          state = state.copyWith(
+            isWhiteboardOpen: isOpen,
+            stage: isOpen ? 'BOARD' : (state.isDocPresenting ? 'SLIDES' : 'VIDEO'),
+          );
         }
       });
 
@@ -550,9 +656,21 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
       debugPrint('[LIVEKIT] Connecting to LiveKit Cloud: $serverUrl');
       _liveKitRoom = lk.Room();
 
+      // Stage 1.1: Enable loudspeaker by default on devices
+      try {
+        await lk.Hardware.instance.setSpeakerphoneOn(true);
+      } catch (e) {
+        debugPrint('[AUDIO] Loudspeaker init note: $e');
+      }
+
       _liveKitRoom?.events.listen((event) {
         debugPrint('[LIVEKIT-EVENT] $event');
-        if (event is lk.TrackSubscribedEvent) {
+        if (event is lk.RoomDisconnectedEvent) {
+          state = state.copyWith(
+            connectionState: 'disconnected',
+            lastLiveKitError: event.reason?.toString(),
+          );
+        } else if (event is lk.TrackSubscribedEvent) {
           if (event.track is lk.VideoTrack) {
             final vt = event.track as lk.VideoTrack;
             if (vt.source == lk.TrackSource.screenShareVideo) {
@@ -672,6 +790,7 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
       }
     } catch (e) {
       debugPrint('[LIVEKIT] LiveKit initialization note: $e');
+      state = state.copyWith(lastLiveKitError: e.toString());
     }
   }
 
@@ -910,11 +1029,40 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
     state = state.copyWith(unreadChatCount: 0);
   }
 
-  Future<void> muteAll() async {
+  Future<void> muteAll({bool lock = false}) async {
     if (state.liveClass != null && state.isHost) {
       await _repository.muteAll(state.liveClass!.id);
-      // Also emit via socket
-      _socket?.emit('host:muteAll', {'classId': state.liveClass!.id});
+      // Also emit via socket with lock flag
+      _socket?.emit('host:muteAll', {'classId': state.liveClass!.id, 'lock': lock});
+    }
+  }
+
+  void unlockMics() {
+    if (_currentClassId != null && state.isHost) {
+      _socket?.emit('host:unlockMic', {'classId': _currentClassId});
+    }
+  }
+
+  void allowStudentToSpeak(String studentId) {
+    if (_currentClassId != null && state.isHost) {
+      _socket?.emit('host:allowSpeak', {
+        'classId': _currentClassId,
+        'studentId': studentId,
+      });
+    }
+  }
+
+  void setStage(String newStage) {
+    if (_currentClassId != null && state.isHost) {
+      _socket?.emit('stage:set', {
+        'classId': _currentClassId,
+        'stage': newStage,
+      });
+      state = state.copyWith(
+        stage: newStage,
+        isWhiteboardOpen: newStage == 'BOARD',
+        isDocPresenting: newStage == 'SLIDES',
+      );
     }
   }
 
