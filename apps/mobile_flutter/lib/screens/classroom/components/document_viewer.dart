@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../models/models.dart';
 import '../../../theme/app_colors.dart';
 import '../../../data/mock_data.dart';
@@ -6,11 +7,19 @@ import '../../../data/mock_data.dart';
 class DocumentViewer extends StatefulWidget {
   final DocumentItem? initialDocument;
   final VoidCallback? onClose;
+  final bool isTeacher;
+  final int? syncedPage;
+  final Function(int page)? onPageChanged;
+  final Function(DocumentItem doc)? onDocumentChanged;
 
   const DocumentViewer({
     super.key,
     this.initialDocument,
     this.onClose,
+    this.isTeacher = true,
+    this.syncedPage,
+    this.onPageChanged,
+    this.onDocumentChanged,
   });
 
   @override
@@ -22,23 +31,97 @@ class _DocumentViewerState extends State<DocumentViewer> {
   int _currentPage = 0;
   double _zoomLevel = 1.0;
 
-  final List<DocumentItem> _allDocs = MockData.sampleDocuments;
+  late List<DocumentItem> _allDocs;
 
   @override
   void initState() {
     super.initState();
+    _allDocs = List.from(MockData.sampleDocuments);
     _currentDoc = widget.initialDocument ?? _allDocs.first;
+    if (widget.syncedPage != null && widget.syncedPage! > 0) {
+      _currentPage = (widget.syncedPage! - 1).clamp(0, _currentDoc.slides.length - 1);
+    }
+  }
+
+  @override
+  void didUpdateWidget(DocumentViewer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.isTeacher && widget.syncedPage != null) {
+      final target = (widget.syncedPage! - 1).clamp(0, _currentDoc.slides.length - 1);
+      if (target != _currentPage) {
+        setState(() => _currentPage = target);
+      }
+    }
+  }
+
+  Future<void> _pickLocalDocument() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'ppt', 'pptx', 'doc', 'docx'],
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final isPdf = file.name.toLowerCase().endsWith('.pdf');
+        final newDoc = DocumentItem(
+          id: 'picked_${DateTime.now().millisecondsSinceEpoch}',
+          title: file.name,
+          fileName: file.name,
+          author: 'Teacher (Local File)',
+          type: isPdf ? 'PDF Document' : 'PPT Presentation',
+          slides: const [
+            PresentationPage(
+              pageNumber: 1,
+              title: file.name,
+              subtitle: 'Local presentation file (${(file.size / 1024).toStringAsFixed(1)} KB)',
+              points: const [
+                'Custom lecture document loaded from device',
+                'Synchronized live presentation mode active',
+                'Teacher maintains slide control',
+              ],
+              formula: 'Status: Presenting to Classroom',
+              diagramUrl: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800',
+            ),
+            PresentationPage(
+              pageNumber: 2,
+              title: 'Detailed Notes & Reference',
+              subtitle: 'Slide 2 of presentation',
+              points: const [
+                'All joined students view this presentation simultaneously',
+                'Interactive formulas and lecture notes displayed',
+                'Real-time pagination synced with teacher',
+              ],
+              formula: 'Live Sync: Active',
+              diagramUrl: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=800',
+            ),
+          ],
+        );
+
+        setState(() {
+          _allDocs.insert(0, newDoc);
+          _currentDoc = newDoc;
+          _currentPage = 0;
+        });
+
+        widget.onDocumentChanged?.call(newDoc);
+        widget.onPageChanged?.call(1);
+      }
+    } catch (e) {
+      debugPrint('[DOC_PICKER] Error picking document: $e');
+    }
   }
 
   void _prevSlide() {
     if (_currentPage > 0) {
       setState(() => _currentPage--);
+      widget.onPageChanged?.call(_currentPage + 1);
     }
   }
 
   void _nextSlide() {
     if (_currentPage < _currentDoc.slides.length - 1) {
       setState(() => _currentPage++);
+      widget.onPageChanged?.call(_currentPage + 1);
     }
   }
 
@@ -93,6 +176,8 @@ class _DocumentViewerState extends State<DocumentViewer> {
                         _currentDoc = doc;
                         _currentPage = 0;
                       });
+                      widget.onDocumentChanged?.call(doc);
+                      widget.onPageChanged?.call(1);
                     },
                     itemBuilder: (context) => _allDocs.map((doc) {
                       return PopupMenuItem<DocumentItem>(
@@ -140,7 +225,7 @@ class _DocumentViewerState extends State<DocumentViewer> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                '${_currentDoc.author} • ${slides.length} Pages (Tap to switch)',
+                                '${_currentDoc.author} • ${slides.length} Pages',
                                 style: const TextStyle(
                                   color: AppColors.indigo300,
                                   fontSize: 10,
@@ -155,6 +240,15 @@ class _DocumentViewerState extends State<DocumentViewer> {
                     ),
                   ),
                 ),
+
+                if (widget.isTeacher)
+                  IconButton(
+                    icon: const Icon(Icons.upload_file_rounded, color: AppColors.indigo300, size: 20),
+                    tooltip: 'Pick PDF / PPT from Device',
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    constraints: const BoxConstraints(),
+                    onPressed: _pickLocalDocument,
+                  ),
 
                 // Zoom controls
                 IconButton(
@@ -375,45 +469,63 @@ class _DocumentViewerState extends State<DocumentViewer> {
               color: AppColors.slate800,
               border: Border(top: BorderSide(color: AppColors.slate700)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _currentPage > 0 ? _prevSlide : null,
-                  icon: const Icon(Icons.arrow_back_rounded, size: 14),
-                  label: const Text('Previous', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.slate700,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: AppColors.slate800,
-                    disabledForegroundColor: AppColors.slate600,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            child: widget.isTeacher
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _currentPage > 0 ? _prevSlide : null,
+                        icon: const Icon(Icons.arrow_back_rounded, size: 14),
+                        label: const Text('Previous', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.slate700,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: AppColors.slate800,
+                          disabledForegroundColor: AppColors.slate600,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                      Text(
+                        'Page ${_currentPage + 1} of ${slides.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: _currentPage < slides.length - 1 ? _nextSlide : null,
+                        icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                        label: const Text('Next Page', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.indigo600,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: AppColors.slate800,
+                          disabledForegroundColor: AppColors.slate600,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ],
+                  )
+                : Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.sync_rounded, color: AppColors.indigo400, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Live Presentation • Page ${_currentPage + 1} of ${slides.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Text(
-                  'Page ${_currentPage + 1} of ${slides.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _currentPage < slides.length - 1 ? _nextSlide : null,
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 14),
-                  label: const Text('Next Page', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.indigo600,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: AppColors.slate800,
-                    disabledForegroundColor: AppColors.slate600,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
