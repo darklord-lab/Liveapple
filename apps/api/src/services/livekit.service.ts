@@ -48,9 +48,13 @@ export class LiveKitService {
       at.addGrant({
         room: roomName,
         roomJoin: true,
-        canPublish: false, // Students are viewer/subscribers by default until unmuted by host
+        canPublish: true, // Allow student to publish their camera & mic so teacher can see & hear them
         canPublishData: true,
         canSubscribe: true,
+        canPublishSources: [
+          TrackSource.CAMERA,
+          TrackSource.MICROPHONE,
+        ],
       });
     }
 
