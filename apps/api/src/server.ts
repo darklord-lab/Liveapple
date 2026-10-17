@@ -57,6 +57,7 @@ async function bootstrap() {
     console.log(`   Environment: ${env.NODE_ENV}`);
     console.log(`   Database: SQLite + Prisma ORM (WAL + FK ON)`);
     validateLiveKitOnStartup();
+    console.log(`[Config] Risky flags: FORCE_DEMO_RESET=${process.env.FORCE_DEMO_RESET === 'true'}, ALLOW_DESTRUCTIVE_DEMO_RESET=${process.env.ALLOW_DESTRUCTIVE_DEMO_RESET === 'true'}, ALLOW_DEMO_USERS=${process.env.ALLOW_DEMO_USERS === 'true'}`);
     console.log(`======================================================\n`);
 
     // Start self-ping keep-alive only in production when APP_URL is configured

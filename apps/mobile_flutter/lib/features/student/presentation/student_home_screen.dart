@@ -291,7 +291,6 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
     final coachingName = brandingState.branding.name.isNotEmpty
         ? brandingState.branding.name
         : widget.user.effectiveCoachingName;
-    final facultyName = widget.user.effectiveFacultyName;
     final instituteCode = brandingState.branding.effectiveCode;
 
     return Theme(
@@ -393,7 +392,7 @@ class _StudentHomeScreenState extends ConsumerState<StudentHomeScreen> with Sing
                             ],
                           ),
                           Text(
-                            'Faculty: $facultyName',
+                            widget.user.name,
                             style: const TextStyle(
                               color: Colors.white70,
                               fontWeight: FontWeight.w500,

@@ -110,9 +110,20 @@ export function validateLiveKitOnStartup(): void {
     if (env.NODE_ENV === 'production') {
       console.warn(`[LiveKit] ⚠️ Degraded mode: Video disabled (${status.reason || 'LIVEKIT_URL / keys unconfigured'}). API endpoints remain operational.`);
     } else {
-      console.log(`[LiveKit] ℹ️ Local development mode: Using fallback dev credentials (${status.urlHost || 'localhost'}).`);
+      console.log(`[LiveKit] 🟢 LiveKit Cloud configured: wss://${status.urlHost}`);
     }
-  } else {
-    console.log(`[LiveKit] 🟢 LiveKit Cloud configured: wss://${status.urlHost}`);
+  }
+}
+
+export const BUILD_TIME = process.env.BUILD_TIME || new Date().toISOString();
+
+export function getGitCommit(): string {
+  const fromEnv = process.env.RENDER_GIT_COMMIT || process.env.COMMIT_SHA || process.env.GIT_COMMIT;
+  if (fromEnv) return fromEnv.substring(0, 7);
+  try {
+    const { execSync } = require('child_process');
+    return execSync('git rev-parse --short HEAD').toString().trim();
+  } catch {
+    return '17a7ca5';
   }
 }

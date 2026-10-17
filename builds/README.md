@@ -9,12 +9,12 @@ This directory stores generated release APKs for the Classora Flutter applicatio
 
 ## Latest Release Build Information
 
-- **Build File:** `Classora-20261011-1447.apk` (and `Classora-Latest.apk` in project root)
-- **Build Date:** 2026-10-11 14:47 IST
+- **Build File:** `Classora-20261017-2130.apk` (and `Classora-Latest.apk` in builds directory)
+- **Build Date:** 2026-10-17 21:30 IST
 - **App Version:** `2.0.0+1`
-- **File Size:** 94,778,427 bytes (90.4 MB)
-- **SHA-256 Checksum:** `A0F7240A3B0F3C35773193A29F495F8C1C2E9F4B46A771A284C06B33BA3484C8`
-- **Design System:** Reference UI (Light-first, Sky-blue app bar, Plus Jakarta Sans font, 4-tab bottom navigation, Drawer, Coloured Quick Access tiles, Schedule Day Strip, Study Material with Filter Sheet, Settings)
+- **File Size:** 114,110,870 bytes (108.8 MB)
+- **SHA-256 Checksum:** `C6F6A385A86BFF3FFDA1693FB6E3DA6B984A605873718649BACED53C2CBFCC4B`
+- **Design System:** Reference UI (Light-first, Sky-blue app bar, Plus Jakarta Sans font, 4-tab bottom navigation, Live Class with bidirectional LiveKit Cloud publishing, Stage sync, Digital Whiteboard, Screen Share, Lecture Docs, 7-button uncluttered bottom bar, floating non-blocking toasts, Loudspeaker hardware routing)
 
 ### Client Experience & Zero-Configuration Architecture
 - **100% Zero URL Configuration:** Clients and users never have to paste, type, or configure any server URL.

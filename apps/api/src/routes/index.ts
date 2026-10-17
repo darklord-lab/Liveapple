@@ -15,7 +15,7 @@ import feeRoutes from './fee.routes.js';
 import materialRoutes from './material.routes.js';
 import instituteContentRoutes from './institute_content.routes.js';
 import storeRoutes from './store.routes.js';
-import { getLiveKitStatus } from '../config/env.js';
+import { getLiveKitStatus, getGitCommit, BUILD_TIME } from '../config/env.js';
 
 const router = Router();
 
@@ -26,6 +26,10 @@ router.get('/health', (_req, res) => {
     service: 'Classora 2.0 API & Realtime Gateway',
     version: '2.0.0',
     timestamp: new Date().toISOString(),
+    build: {
+      commit: getGitCommit(),
+      builtAt: BUILD_TIME,
+    },
     livekit: {
       configured: lkStatus.configured,
       urlHost: lkStatus.urlHost,

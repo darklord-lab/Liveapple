@@ -15,8 +15,23 @@ export function createApp(): Express {
   // Trust first proxy (Cloudflare tunnel, reverse proxies)
   app.set('trust proxy', 1);
 
-  // 1. Security Headers
-  app.use(helmet({ contentSecurityPolicy: false }));
+  // 1. Security Headers with CSP allowing API & LiveKit WebSocket
+  const livekitWss = env.LIVEKIT_URL ? env.LIVEKIT_URL.replace(/^http/, 'ws') : 'wss:';
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          connectSrc: ["'self'", "https:", "wss:", livekitWss],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://fonts.googleapis.com"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+          imgSrc: ["'self'", "data:", "blob:", "https:"],
+          workerSrc: ["'self'", "blob:"],
+        },
+      },
+    })
+  );
 
   // 2. CORS Allowlist
   const allowedOrigins = env.CORS_ORIGINS.split(',').map((o) => o.trim());
@@ -65,6 +80,41 @@ export function createApp(): Express {
     });
     app.get('/admin/*', (_req, res) => {
       res.sendFile(path.join(adminDist, 'index.html'));
+    });
+  }
+
+  // 6b. Serve Flutter Web App (/app)
+  const webDistCandidates = [
+    path.resolve(process.cwd(), 'web-dist'),
+    path.resolve(process.cwd(), '../api/web-dist'),
+    path.resolve(process.cwd(), 'apps/api/web-dist'),
+    path.resolve(process.cwd(), '../mobile_flutter/build/web'),
+    path.resolve(process.cwd(), 'apps/mobile_flutter/build/web'),
+  ];
+  const webDist = webDistCandidates.find((p) => fs.existsSync(p));
+  if (webDist) {
+    app.use(
+      '/app',
+      express.static(webDist, {
+        setHeaders: (res, filePath) => {
+          if (
+            filePath.endsWith('.html') ||
+            filePath.endsWith('flutter_service_worker.js') ||
+            filePath.endsWith('main.dart.js')
+          ) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          } else {
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+          }
+        },
+      })
+    );
+    app.get('/app', (_req, res) => {
+      res.redirect('/app/');
+    });
+    app.get('/app/*', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.sendFile(path.join(webDist, 'index.html'));
     });
   }
 

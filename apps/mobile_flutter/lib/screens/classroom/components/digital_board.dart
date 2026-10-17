@@ -1,13 +1,22 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../models/models.dart';
 import '../../../theme/app_colors.dart';
 
 class DigitalBoard extends StatefulWidget {
   final bool isTeacher;
+  final Function(Map<String, dynamic>)? onDrawStroke;
+  final VoidCallback? onClearBoard;
+  final Stream<Map<String, dynamic>>? remoteDrawStream;
+  final Stream<void>? remoteClearStream;
 
   const DigitalBoard({
     super.key,
     this.isTeacher = true,
+    this.onDrawStroke,
+    this.onClearBoard,
+    this.remoteDrawStream,
+    this.remoteClearStream,
   });
 
   @override
@@ -23,6 +32,67 @@ class _DigitalBoardState extends State<DigitalBoard> {
   int _currentPageIndex = 0;
   final List<List<DrawingPoint>> _pages = [[]];
   final List<List<DrawingPoint>> _redoStack = [[]];
+
+  StreamSubscription? _drawSub;
+  StreamSubscription? _clearSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribeToRemoteEvents();
+  }
+
+  @override
+  void didUpdateWidget(DigitalBoard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.remoteDrawStream != widget.remoteDrawStream ||
+        oldWidget.remoteClearStream != widget.remoteClearStream) {
+      _drawSub?.cancel();
+      _clearSub?.cancel();
+      _subscribeToRemoteEvents();
+    }
+  }
+
+  void _subscribeToRemoteEvents() {
+    _drawSub = widget.remoteDrawStream?.listen((data) {
+      if (!mounted) return;
+      if (data['isEnd'] == true) {
+        setState(() {
+          _pages[_currentPageIndex].add(const DrawingPoint(
+            point: Offset(-1, -1),
+            color: Colors.transparent,
+            strokeWidth: 0,
+          ));
+        });
+      } else {
+        final x = (data['x'] as num).toDouble();
+        final y = (data['y'] as num).toDouble();
+        final colorVal = data['color'] as int? ?? 0xFF000000;
+        final width = (data['width'] as num?)?.toDouble() ?? 3.0;
+        final isEraser = data['isEraser'] as bool? ?? false;
+        setState(() {
+          _pages[_currentPageIndex].add(DrawingPoint(
+            point: Offset(x, y),
+            color: Color(colorVal),
+            strokeWidth: width,
+            isEraser: isEraser,
+          ));
+        });
+      }
+    });
+
+    _clearSub = widget.remoteClearStream?.listen((_) {
+      if (!mounted) return;
+      _clear(notify: false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _drawSub?.cancel();
+    _clearSub?.cancel();
+    super.dispose();
+  }
 
   final List<Color> _colors = const [
     Color(0xFF0F172A),
@@ -54,11 +124,14 @@ class _DigitalBoardState extends State<DigitalBoard> {
     }
   }
 
-  void _clear() {
+  void _clear({bool notify = true}) {
     setState(() {
       _pages[_currentPageIndex].clear();
       _redoStack[_currentPageIndex].clear();
     });
+    if (notify) {
+      widget.onClearBoard?.call();
+    }
   }
 
   void _addPage() {
@@ -291,17 +364,30 @@ class _DigitalBoardState extends State<DigitalBoard> {
                       _currentDrag = localPos;
                     });
                   } else {
+                    final color = _activeTool == 'highlighter'
+                        ? _selectedColor.withOpacity(0.35)
+                        : (_activeTool == 'eraser' ? Colors.white : _selectedColor);
+                    final width = _activeTool == 'eraser' ? 24.0 : (_activeTool == 'highlighter' ? 16.0 : _strokeWidth);
+                    final isEraser = _activeTool == 'eraser';
+
                     setState(() {
                       final point = DrawingPoint(
                         point: localPos,
-                        color: _activeTool == 'highlighter'
-                            ? _selectedColor.withOpacity(0.35)
-                            : (_activeTool == 'eraser' ? Colors.white : _selectedColor),
-                        strokeWidth: _activeTool == 'eraser' ? 24.0 : (_activeTool == 'highlighter' ? 16.0 : _strokeWidth),
-                        isEraser: _activeTool == 'eraser',
+                        color: color,
+                        strokeWidth: width,
+                        isEraser: isEraser,
                       );
                       _pages[_currentPageIndex].add(point);
                       _redoStack[_currentPageIndex].clear();
+                    });
+
+                    widget.onDrawStroke?.call({
+                      'x': localPos.dx,
+                      'y': localPos.dy,
+                      'color': color.value,
+                      'width': width,
+                      'isEraser': isEraser,
+                      'isEnd': false,
                     });
                   }
                 },
@@ -312,16 +398,29 @@ class _DigitalBoardState extends State<DigitalBoard> {
                       _currentDrag = localPos;
                     });
                   } else {
+                    final color = _activeTool == 'highlighter'
+                        ? _selectedColor.withOpacity(0.35)
+                        : (_activeTool == 'eraser' ? Colors.white : _selectedColor);
+                    final width = _activeTool == 'eraser' ? 24.0 : (_activeTool == 'highlighter' ? 16.0 : _strokeWidth);
+                    final isEraser = _activeTool == 'eraser';
+
                     setState(() {
                       final point = DrawingPoint(
                         point: localPos,
-                        color: _activeTool == 'highlighter'
-                            ? _selectedColor.withOpacity(0.35)
-                            : (_activeTool == 'eraser' ? Colors.white : _selectedColor),
-                        strokeWidth: _activeTool == 'eraser' ? 24.0 : (_activeTool == 'highlighter' ? 16.0 : _strokeWidth),
-                        isEraser: _activeTool == 'eraser',
+                        color: color,
+                        strokeWidth: width,
+                        isEraser: isEraser,
                       );
                       _pages[_currentPageIndex].add(point);
+                    });
+
+                    widget.onDrawStroke?.call({
+                      'x': localPos.dx,
+                      'y': localPos.dy,
+                      'color': color.value,
+                      'width': width,
+                      'isEraser': isEraser,
+                      'isEnd': false,
                     });
                   }
                 },
@@ -343,6 +442,9 @@ class _DigitalBoardState extends State<DigitalBoard> {
                         color: Colors.transparent,
                         strokeWidth: 0,
                       ));
+                    });
+                    widget.onDrawStroke?.call({
+                      'isEnd': true,
                     });
                   }
                 },
