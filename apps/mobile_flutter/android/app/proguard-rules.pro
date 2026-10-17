@@ -10,6 +10,7 @@
 -keep class io.livekit.android.** { *; }
 -keep class livekit.org.webrtc.** { *; }
 -keep class org.webrtc.** { *; }
+-keep class com.cloudwebrtc.webrtc.** { *; }
 
 # Prevent native JNI methods from being renamed/stripped
 -keepclasseswithmembernames class * {

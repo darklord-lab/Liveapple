@@ -130,6 +130,7 @@ export function setupSocketGateway(io: Server) {
 
       socket.emit('classroom:snapshot', {
         stage: currentStage,
+        mode: currentStage,
         mediaMode,
         isMicLocked,
         board: {
@@ -144,7 +145,8 @@ export function setupSocketGateway(io: Server) {
       socket.emit('poll:list', { polls });
       socket.emit('chat:history', { messages: chatHistory });
       socket.emit('board:state', { isOpen: isBoardOpen, canDraw, strokes });
-      socket.emit('stage:changed', { stage: currentStage });
+      socket.emit('stage:state', { stage: currentStage, mode: currentStage });
+      socket.emit('stage:changed', { stage: currentStage, mode: currentStage });
       if (docState) socket.emit('doc:present', docState);
 
       // Notify others in room
@@ -218,28 +220,26 @@ export function setupSocketGateway(io: Server) {
     });
 
     // Stage sync: Teacher sets stage (VIDEO | SCREEN | BOARD | SLIDES)
-    socket.on('stage:set', (data: { classId: string; stage: 'VIDEO' | 'SCREEN' | 'BOARD' | 'SLIDES' }) => {
+    socket.on('stage:set', (data: { classId: string; stage?: 'VIDEO' | 'SCREEN' | 'BOARD' | 'SLIDES'; mode?: 'VIDEO' | 'SCREEN' | 'BOARD' | 'SLIDES' }) => {
       if (!isHost) return;
-      roomStages.set(data.classId, data.stage);
-      if (data.stage === 'BOARD') {
-        roomBoardStates.set(data.classId, true);
-        io.to(`class:${data.classId}`).emit('board:state', { isOpen: true, canDraw: isHost });
-      } else if (data.stage === 'SLIDES') {
-        roomBoardStates.set(data.classId, false);
-      } else {
-        roomBoardStates.set(data.classId, false);
-        io.to(`class:${data.classId}`).emit('board:state', { isOpen: false, canDraw: false });
-      }
-      io.to(`class:${data.classId}`).emit('stage:changed', { stage: data.stage });
+      const targetStage = (data.mode || data.stage || 'VIDEO') as 'VIDEO' | 'SCREEN' | 'BOARD' | 'SLIDES';
+      roomStages.set(data.classId, targetStage);
+      const isBoard = targetStage === 'BOARD';
+      roomBoardStates.set(data.classId, isBoard);
+      io.to(`class:${data.classId}`).emit('board:state', { isOpen: isBoard, canDraw: isBoard ? isHost : false });
+      io.to(`class:${data.classId}`).emit('stage:state', { stage: targetStage, mode: targetStage });
+      io.to(`class:${data.classId}`).emit('stage:changed', { stage: targetStage, mode: targetStage });
     });
 
     // Host toggles board open/close for all students
     socket.on('board:toggle', (data: { classId: string; isOpen: boolean }) => {
       if (!isHost) return;
+      const targetStage = data.isOpen ? 'BOARD' : 'VIDEO';
       roomBoardStates.set(data.classId, data.isOpen);
-      roomStages.set(data.classId, data.isOpen ? 'BOARD' : 'VIDEO');
-      io.to(`class:${data.classId}`).emit('board:state', { isOpen: data.isOpen });
-      io.to(`class:${data.classId}`).emit('stage:changed', { stage: data.isOpen ? 'BOARD' : 'VIDEO' });
+      roomStages.set(data.classId, targetStage);
+      io.to(`class:${data.classId}`).emit('board:state', { isOpen: data.isOpen, canDraw: isHost });
+      io.to(`class:${data.classId}`).emit('stage:state', { stage: targetStage, mode: targetStage });
+      io.to(`class:${data.classId}`).emit('stage:changed', { stage: targetStage, mode: targetStage });
     });
 
     // Host presents PPT/PDF document slides to all students
@@ -248,10 +248,12 @@ export function setupSocketGateway(io: Server) {
       roomDocStates.set(data.classId, data);
       if (data.isOpen) {
         roomStages.set(data.classId, 'SLIDES');
-        io.to(`class:${data.classId}`).emit('stage:changed', { stage: 'SLIDES' });
+        io.to(`class:${data.classId}`).emit('stage:state', { stage: 'SLIDES', mode: 'SLIDES' });
+        io.to(`class:${data.classId}`).emit('stage:changed', { stage: 'SLIDES', mode: 'SLIDES' });
       } else if (roomStages.get(data.classId) === 'SLIDES') {
         roomStages.set(data.classId, 'VIDEO');
-        io.to(`class:${data.classId}`).emit('stage:changed', { stage: 'VIDEO' });
+        io.to(`class:${data.classId}`).emit('stage:state', { stage: 'VIDEO', mode: 'VIDEO' });
+        io.to(`class:${data.classId}`).emit('stage:changed', { stage: 'VIDEO', mode: 'VIDEO' });
       }
       io.to(`class:${data.classId}`).emit('doc:present', data);
     });

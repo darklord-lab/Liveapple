@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -714,29 +715,32 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                   ref.read(liveClassRoomProvider.notifier).toggleWhiteboard();
                 },
               ),
-              ListTile(
-                leading: Icon(
-                  roomState.isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
-                  color: roomState.isScreenSharing ? AppColors.skyBlue : Colors.white,
-                ),
-                title: Text(
-                  roomState.isScreenSharing ? 'Stop Screen Share' : 'Share Screen',
-                  style: TextStyle(
+              if (kIsWeb)
+                ListTile(
+                  leading: Icon(
+                    roomState.isScreenSharing ? Icons.stop_screen_share : Icons.screen_share,
                     color: roomState.isScreenSharing ? AppColors.skyBlue : Colors.white,
-                    fontWeight: FontWeight.w600,
                   ),
+                  title: Text(
+                    roomState.isScreenSharing ? 'Stop Screen Share' : 'Share Screen',
+                    style: TextStyle(
+                      color: roomState.isScreenSharing ? AppColors.skyBlue : Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(
+                    roomState.isScreenSharing
+                        ? 'Currently sharing your screen with class'
+                        : 'Broadcast your browser window or tab to all students',
+                    style: const TextStyle(color: AppColors.slate400, fontSize: 11),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    ref.read(liveClassRoomProvider.notifier).toggleScreenShare(
+                          onError: (msg) => _showToast(context, msg),
+                        );
+                  },
                 ),
-                subtitle: Text(
-                  roomState.isScreenSharing
-                      ? 'Currently sharing your screen with class'
-                      : 'Broadcast your phone screen or browser window to all students',
-                  style: const TextStyle(color: AppColors.slate400, fontSize: 11),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  ref.read(liveClassRoomProvider.notifier).toggleScreenShare();
-                },
-              ),
               ListTile(
                 leading: Icon(
                   roomState.isDocPresenting ? Icons.slideshow : Icons.picture_as_pdf_outlined,
@@ -774,6 +778,12 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
   }
 
   void _showDebugOverlay(BuildContext context, LiveClassRoomState roomState) {
+    const appCommit = String.fromEnvironment('APP_COMMIT', defaultValue: 'dev');
+    final isCommitMismatch = appCommit != 'dev' &&
+        roomState.serverBuildCommit != null &&
+        roomState.serverBuildCommit != 'Unknown' &&
+        appCommit != roomState.serverBuildCommit;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF0F172A),
@@ -785,7 +795,7 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
         return Container(
           padding: const EdgeInsets.all(20),
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.75,
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
           ),
           child: SingleChildScrollView(
             child: Column(
@@ -805,18 +815,89 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                   ],
                 ),
                 const Divider(color: Color(0xFF334155)),
+                if (isCommitMismatch)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppColors.error),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'WARNING: App build ($appCommit) differs from server commit (${roomState.serverBuildCommit})',
+                            style: const TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                _buildDebugRow('App Build ID (Git SHA)', appCommit),
                 _buildDebugRow('Server Commit', roomState.serverBuildCommit ?? 'Unknown / Local'),
                 _buildDebugRow('Server Built At', roomState.serverBuildTime ?? 'Unknown'),
+                _buildDebugRow('Socket Connected', roomState.isSocketConnected ? 'YES' : 'NO'),
+                _buildDebugRow('Class Room Joined', roomState.isRoomJoined ? 'YES' : 'NO'),
+                _buildDebugRow('Snapshot Received', roomState.snapshotReceived ? 'YES' : 'NO'),
                 _buildDebugRow('Class ID', roomState.liveClass?.id ?? widget.classId),
                 _buildDebugRow('Role / Host', roomState.isHost ? 'TEACHER (Host)' : 'STUDENT'),
                 _buildDebugRow('Connection State', roomState.connectionState),
                 _buildDebugRow('Current Stage', roomState.stage),
+                _buildDebugRow('Last Stage Event Sent', roomState.lastStageEventSent ?? 'None'),
+                _buildDebugRow('Last Stage Event Received', roomState.lastStageEventReceived ?? 'None'),
+                _buildDebugRow('Board Events (Sent / Received)', '${roomState.boardEventsSent} sent / ${roomState.boardEventsReceived} received'),
                 _buildDebugRow('Mic Locked by Host', roomState.isMicLocked ? 'YES' : 'NO'),
                 _buildDebugRow('Participants Count', '${roomState.participants.length}'),
                 _buildDebugRow('Video Tracks Count', '${roomState.remoteVideoTracks.length}'),
                 _buildDebugRow('Token Grants', '${roomState.tokenGrants ?? "None"}'),
                 if (roomState.lastLiveKitError != null)
                   _buildDebugRow('Last LiveKit Error', roomState.lastLiveKitError!, isError: true),
+                const SizedBox(height: 12),
+                const Text(
+                  'Remote Participants Media Details:',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                ...roomState.participants.where((p) => !p.isLocal).map((p) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${p.name} (${p.identity}) • ${p.role}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Mic Pub: present=${p.micPubPresent}, muted=${p.micPubMuted}, sub=${p.micPubSubscribed} (Effective: ${p.isRealMicMuted ? "MUTED" : "UNMUTED"})',
+                        style: TextStyle(
+                          color: p.isRealMicMuted ? AppColors.error : AppColors.success,
+                          fontSize: 10,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Cam Pub: present=${p.camPubPresent}, muted=${p.camPubMuted}, sub=${p.camPubSubscribed} (Effective: ${p.isRealCameraOff ? "OFF" : "ON"})',
+                        style: TextStyle(
+                          color: p.isRealCameraOff ? AppColors.error : AppColors.success,
+                          fontSize: 10,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
                 const SizedBox(height: 12),
               ],
             ),
@@ -1181,7 +1262,7 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
 
             // Main Stage Area (Whiteboard, Document Viewer, or Meet-like Video Stage)
             Expanded(
-              child: roomState.isWhiteboardOpen
+              child: (roomState.stage == 'BOARD' || roomState.isWhiteboardOpen)
                   ? Stack(
                       children: [
                         Positioned.fill(
@@ -1203,7 +1284,7 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                         ),
                       ],
                     )
-                  : (roomState.isDocPresenting
+                  : ((roomState.stage == 'SLIDES' || roomState.isDocPresenting)
                       ? DocumentViewer(
                           isTeacher: roomState.isHost,
                           syncedPage: roomState.docPage,
@@ -1653,13 +1734,13 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                heroParticipant.isMicMuted ? Icons.mic_off : Icons.graphic_eq,
-                                color: heroParticipant.isMicMuted ? AppColors.error : AppColors.primaryLight,
+                                heroParticipant.isRealMicMuted ? Icons.mic_off : Icons.graphic_eq,
+                                color: heroParticipant.isRealMicMuted ? AppColors.error : AppColors.primaryLight,
                                 size: 14,
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                heroParticipant.isMicMuted ? 'Microphone Muted' : (heroParticipant.isHost ? 'Speaking (Host)' : 'Speaking'),
+                                heroParticipant.isRealMicMuted ? 'Microphone Muted' : (heroParticipant.isHost ? 'Speaking (Host)' : 'Speaking'),
                                 style: const TextStyle(color: AppColors.slate400, fontSize: 11),
                               ),
                             ],
@@ -1682,8 +1763,8 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            heroParticipant.isMicMuted ? Icons.mic_off : Icons.mic,
-                            color: heroParticipant.isMicMuted ? AppColors.error : AppColors.success,
+                            heroParticipant.isRealMicMuted ? Icons.mic_off : Icons.mic,
+                            color: heroParticipant.isRealMicMuted ? AppColors.error : AppColors.success,
                             size: 14,
                           ),
                           const SizedBox(width: 4),
@@ -1804,8 +1885,8 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
                     ),
                   ),
                   Icon(
-                    p.isMicMuted ? Icons.mic_off : Icons.mic,
-                    color: p.isMicMuted ? AppColors.error : AppColors.success,
+                    p.isRealMicMuted ? Icons.mic_off : Icons.mic,
+                    color: p.isRealMicMuted ? AppColors.error : AppColors.success,
                     size: 11,
                   ),
                 ],
