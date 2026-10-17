@@ -1,52 +1,51 @@
-# DESIGN — Classora UI/UX
+# DESIGN — Classora UI/UX (v2, light-first)
 
-## Principles
-Clean, fast, class-ke-dauran distraction-free. Teacher ke liye controls ek tap me; student ke liye "Join" sabse prominent.
+Reference: a clean coaching-app style (sky-blue app bar, white background, colored home tiles, left drawer, 4-tab bottom nav, bottom-sheet filters, simple empty states). Use layout/patterns only; Classora has its own name, logo and assets. See `ui_reference_student.png` and `ui_reference_teacher_admin.png`.
 
-## Design Tokens
+## 1. Tokens
 | Token | Value |
 |---|---|
-| Primary | Indigo `#4F46E5` |
-| Primary Dark | `#3730A3` |
-| Accent / Live | Red `#DC2626` (LIVE badge) |
-| Success | `#16A34A` |
-| Warning | `#D97706` |
-| Surface (light) | `#FFFFFF`, bg `#F8FAFC` |
-| Surface (dark) | `#0F172A`, card `#1E293B` |
-| Text | `#0F172A` / `#94A3B8` |
-| Radius | 12 (cards), 999 (chips/buttons-pill) |
-| Spacing | 4 · 8 · 12 · 16 · 24 · 32 |
-| Font | Inter (Poppins headings optional) |
+| Primary (app bar, buttons, active nav) | Sky blue `#0A9BE8` |
+| Accent / logo | Indigo `#4F46E5` |
+| Live | Red `#DC2626` |
+| Success / Warning | `#16A34A` / `#D97706` |
+| Tile colors | Brown `#8B5E3C`, Blue `#2F6FD6`, Green `#2FA37A`, Orange `#F28A30` |
+| Light bg / card | `#F4F6F8` / `#FFFFFF` (radius 12, soft shadow) |
+| Dark bg / card | `#0F172A` / `#1E293B` (live class always dark) |
+| Text | `#0F172A` / secondary `#64748B` |
+| Spacing | 4 · 8 · 12 · 16 · 24 |
+| Font | Inter; min touch 48 dp |
 
-Material 3, light + dark theme dono; live class screen default dark.
+## 2. Shared Components
+AppScaffold (blue app bar, hamburger or back, institute name + logo, bell with badge), AppBottomNav (4 tabs), AppDrawer, ColorTile, SectionHeader, InfoChip, StatusPill (LIVE / UPCOMING / ENDED), PrimaryButton, OutlinedPillButton, SearchField, FilterSheet (sections, range slider, sort radios, CLEAR + APPLY), EmptyState, ErrorState, LoadingSkeleton, UserAvatar, ConfirmDialog, PermissionRationaleDialog.
 
-## Navigation
-- **Student** bottom tabs: Home · Timetable · Recordings · Homework · Profile
-- **Teacher** bottom tabs: Dashboard · Timetable · Batches · Go Live · Profile
-- **Admin** bottom tabs: Overview · Teachers · Batches · Fees · Settings
+## 3. Student (bottom nav: Home · Schedule · Learn · Profile)
+- **Home**: LIVE NOW card (Join), 2x2 ColorTiles (**Live Schedule, Study Material, Recordings, My Batches**), Next classes carousel, Homework & tests due, Testimonials, Connect With Us (only if links set).
+- **Schedule**: week strip with counts + day agenda (all enrolled batches).
+- **Learn**: tabs **STUDY MATERIAL · RECORDINGS · ASSIGNMENTS · TESTS**, search, sort, filter by batch/subject.
+- **Profile**: avatar, institute code, Edit Profile, Attendance, Fees, Settings.
+- **Drawer**: avatar, name, Institute Code, Study Material, Assignments, Tests, Recordings, Attendance, Fees & Receipts, Edit Profile, Settings, Help / How to use, Privacy Policy, Share app.
+- **Store (P2)**: Featured offerings, list with price/MRP/discount, filter sheet (Discount/Offers, Previously purchased, price range, sort), Get this batch.
+- **No Test Series, no Chats tab, no Offline Downloads.**
 
-## Key Screens
-1. **Splash / Login / Accept Invite** — email/phone + password, "invite code daalo".
-2. **Admin → Teachers**: list + search, FAB "Add Teacher" (single / CSV bulk), status chip (Invited, Active, Suspended).
-3. **Teacher → Timetable**: week strip + day agenda, tap slot → edit; "+ Add slot" bottom sheet (batch, subject, days, time, repeat).
-4. **Teacher → Batch**: students list, share **invite code / QR**, pending approvals.
-5. **Student Home**: pulsing red **LIVE NOW** card (Join button), today's classes, upcoming.
-6. **Pre-join sheet**: camera preview, mic level, toggle mic/cam, "Join".
-7. **Live Class**
-   - Main stage: teacher video / shared screen / whiteboard (switchable)
-   - Teacher PiP draggable
-   - Bottom bar: Mic · Camera · Share Screen · Whiteboard · Chat · Raise Hand · Participants · Leave/End
-   - Side sheet: Chat · Participants · Doubts · Polls
-   - Network quality indicator, recording dot, timer
-   - Host (teacher) menu: mute all, mute/remove student, allow mic, lock room
-8. **Notifications**: list + deep link.
+## 4. Teacher (bottom nav: Home · Timetable · Batches · Profile)
+- **Home**: Today's classes with **Go Live / Enter Room**, 2x3 ColorTiles (**Batches, Timetable, Live Classes, Study Material, Assignments & Tests, Recordings**), stats (students, classes this week), pending submissions.
+- **Timetable**: week strip, Add Slot sheet (batch dropdown with ellipsis, day, start/end, recurring), conflict message inline.
+- **Batch detail**: join code + QR + share, students list, pending approvals, Study Material tab (folders, upload PDF/doc/link, free toggle).
+- **Live Classes**: scheduled/live/past filters, Generate from slots.
+- **Drawer/Settings/Profile** same as student (role-specific items).
+- No standalone whiteboard card; whiteboard only inside a live class (teacher tools).
 
-## Notifications Copy
-- "🔴 Physics Live ho gaya hai — Prof. Sharma. Abhi join karo"
-- "⏰ 15 min me Chemistry class start hogi"
+## 5. Admin (bottom nav: Overview · Teachers · Batches · More)
+- **Overview**: stat cards (students, teachers, revenue, attendance), recent activity.
+- **Teachers**: search, status filter sheet, Add single / Bulk CSV, invite code copy/share, suspend.
+- **Batches**, **Fees** (collected / pending / receipts), **Branding** (institute name, logo, code, color), **Links** (YouTube/Telegram/WhatsApp), **Testimonials**, **Store** (P2), **Settings**.
 
-## Interaction Rules
-- Join ≤ 2 taps from notification.
-- Bahut saare students: grid pagination (max 9 tiles/page), active speaker highlight.
-- Landscape support on live screen; whiteboard me stylus/palm rejection.
-- Accessibility: min touch 48dp, contrast AA, captions later.
+## 6. Live Classroom (dark, Meet-like)
+Top bar: title (ellipsis) · LIVE pill · timer · connection/network badge · End class (teacher). Stage: teacher video / screen share / whiteboard. Participant strip/grid (max 9 per page). Bottom bar: Mic · Camera · Share screen (teacher) · Board (teacher draws, students view) · Chat · People · More (raise hand, polls, doubts, mute all, lock room) · Leave. People sheet shows real names, mic/cam state, hand-raised first, teacher actions (mute, allow mic/cam/board, remove). Reconnect banner, PiP, keep screen awake.
+
+## 7. States & Copy
+Empty: "No recordings yet", "No study material yet". Errors say what to do ("Server tak nahi pahunch pa raha. URL check karo"). Notifications: "🔴 Physics live ho gaya hai - abhi join karo", "⏰ 15 min me Maths class".
+
+## 8. Quality
+No overflow at 320/360 dp, AA contrast, semantics labels, text scale 1.3, widget tests for long text.

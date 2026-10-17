@@ -5,6 +5,9 @@ import { tenantGuard } from '../middlewares/tenant.js';
 
 const router = Router();
 
+// Public: View shared score card & deep link preview (no login required)
+router.get('/share/:attemptId', TestController.getSharedScore);
+
 router.use(authenticate, tenantGuard);
 
 router.get('/', TestController.listTests);

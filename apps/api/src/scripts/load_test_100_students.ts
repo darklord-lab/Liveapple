@@ -192,6 +192,11 @@ async function runLoadBenchmark() {
 
   // 5. Cleanup Test Artifacts
   console.log(`[5/5] Cleaning up benchmark institute...`);
+  await prisma.attendance.deleteMany({ where: { liveClassId: liveClass.id } });
+  await prisma.liveClass.deleteMany({ where: { instituteId: institute.id } });
+  await prisma.enrollment.deleteMany({ where: { instituteId: institute.id } });
+  await prisma.batch.deleteMany({ where: { instituteId: institute.id } });
+  await prisma.user.deleteMany({ where: { instituteId: institute.id } });
   await prisma.institute.delete({ where: { id: institute.id } });
   console.log(`✓ Cleanup complete.\n`);
 

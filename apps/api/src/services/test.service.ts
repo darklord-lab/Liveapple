@@ -391,4 +391,79 @@ export class TestService {
 
     return test;
   }
+
+  /**
+   * Public: Get sanitized share card details for a test attempt with deep link
+   */
+  static async getSharedTestScore(attemptId: string) {
+    const attempt = await prisma.testAttempt.findUnique({
+      where: { id: attemptId },
+      include: {
+        test: {
+          select: {
+            id: true,
+            title: true,
+            durationMin: true,
+            totalMarks: true,
+            batch: {
+              select: {
+                id: true,
+                name: true,
+                subject: true,
+              },
+            },
+          },
+        },
+        student: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        institute: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            logoUrl: true,
+            primaryColor: true,
+            tagline: true,
+          },
+        },
+      },
+    });
+
+    if (!attempt || !attempt.test) {
+      throw new AppError('NOT_FOUND', 'Test score attempt not found', 404);
+    }
+
+    const totalMarks = attempt.totalMarks > 0 ? attempt.totalMarks : attempt.test.totalMarks;
+    const percentage = totalMarks > 0 ? Math.round((attempt.score / totalMarks) * 100) : 0;
+    const instituteCode = attempt.institute.code || (attempt.institute.id.length >= 6 ? attempt.institute.id.substring(0, 6).toUpperCase() : 'APEX01');
+
+    return {
+      attemptId: attempt.id,
+      testId: attempt.test.id,
+      testTitle: attempt.test.title,
+      durationMin: attempt.test.durationMin,
+      batchName: attempt.test.batch.name,
+      subject: attempt.test.batch.subject,
+      studentName: attempt.student.name,
+      score: attempt.score,
+      totalMarks,
+      percentage,
+      status: attempt.status,
+      submittedAt: attempt.submittedAt || attempt.startedAt,
+      institute: {
+        id: attempt.institute.id,
+        name: attempt.institute.name,
+        code: instituteCode,
+        logoUrl: attempt.institute.logoUrl,
+        primaryColor: attempt.institute.primaryColor || '#0A9BE8',
+        tagline: attempt.institute.tagline,
+      },
+      deepLink: `classora://test-result?attemptId=${attempt.id}&code=${instituteCode}`,
+      webLink: `https://classora.app/test-result?attemptId=${attempt.id}&code=${instituteCode}`,
+    };
+  }
 }

@@ -1,0 +1,35 @@
+# Cloudflare Named Tunnel Configuration for Classora 2.0
+# Reference: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+
+tunnel: classora-prod-tunnel
+credentials-file: /root/.cloudflared/classora-prod-tunnel.json
+
+# Ingress Rules
+# Traffic routed securely from Cloudflare Edge directly to local services without open inbound firewall ports.
+ingress:
+  # 1. API & Real-time WebSocket Gateway
+  - hostname: api.classora.com
+    service: http://localhost:4000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+      tcpKeepAlive: 30s
+      http2Origin: false
+
+  # 2. Web Admin Portal
+  - hostname: admin.classora.com
+    service: http://localhost:4000
+    path: /*
+    originRequest:
+      connectTimeout: 15s
+
+  # 3. LiveKit SFU (Signaling & HTTP)
+  # NOTE: WebRTC UDP media (ports 7882 and 50000-60000) should bypass HTTP tunnels
+  # and use direct IP routing or Cloudflare Spectrum.
+  - hostname: livekit.classora.com
+    service: http://localhost:7880
+    originRequest:
+      noTLSVerify: true
+
+  # Default Catch-all (404)
+  - service: http_status:404

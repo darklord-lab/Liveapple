@@ -1,20 +1,118 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/empty_state.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../core/network/endpoints.dart';
 import '../controllers/learning_controller.dart';
 import '../../domain/models/learning_models.dart';
+import '../../domain/models/test_share_model.dart';
+import '../widgets/test_score_share_card.dart';
 
-class CbtTestsScreen extends ConsumerWidget {
+import '../../../../core/widgets/filter_sort_sheet.dart';
+
+class CbtTestsScreen extends ConsumerStatefulWidget {
   const CbtTestsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CbtTestsScreen> createState() => _CbtTestsScreenState();
+}
+
+class _CbtTestsScreenState extends ConsumerState<CbtTestsScreen> {
+  String _selectedBatch = 'ALL';
+  String _selectedSubject = 'ALL';
+  String _selectedStatus = 'ALL';
+  String _selectedSort = 'default';
+
+  int get _activeCount =>
+      (_selectedBatch != 'ALL' ? 1 : 0) +
+      (_selectedSubject != 'ALL' ? 1 : 0) +
+      (_selectedStatus != 'ALL' ? 1 : 0) +
+      (_selectedSort != 'default' ? 1 : 0);
+
+  void _resetFilters() {
+    setState(() {
+      _selectedBatch = 'ALL';
+      _selectedSubject = 'ALL';
+      _selectedStatus = 'ALL';
+      _selectedSort = 'default';
+    });
+  }
+
+  Future<void> _openFilterSortSheet(List<CbtTestModel> tests) async {
+    final batches = {'ALL', ...tests.map((t) => t.batchName).where((b) => b != null && b.isNotEmpty).cast<String>()}.toList();
+    final subjects = {'ALL', ...tests.map((t) => t.subject).where((s) => s != null && s.isNotEmpty).cast<String>()}.toList();
+
+    final result = await showFilterSortSheet<String>(
+      context: context,
+      title: 'Filter & Sort Tests',
+      filters: [
+        FilterConfig<String>(
+          id: 'batch',
+          title: 'Batch',
+          options: batches.map((b) => FilterItem(value: b, label: b == 'ALL' ? 'All Batches' : b)).toList(),
+          initialValue: _selectedBatch,
+          defaultValue: 'ALL',
+        ),
+        if (subjects.length > 1)
+          FilterConfig<String>(
+            id: 'subject',
+            title: 'Subject',
+            options: subjects.map((s) => FilterItem(value: s, label: s == 'ALL' ? 'All Subjects' : s)).toList(),
+            initialValue: _selectedSubject,
+            defaultValue: 'ALL',
+          ),
+        const FilterConfig<String>(
+          id: 'status',
+          title: 'Attempt Status',
+          options: [
+            FilterItem(value: 'ALL', label: 'All Tests', icon: Icons.all_inclusive),
+            FilterItem(value: 'UNATTEMPTED', label: 'Unattempted (Pending)', icon: Icons.pending_actions),
+            FilterItem(value: 'ATTEMPTED', label: 'Attempted (Completed)', icon: Icons.check_circle_outline),
+          ],
+          initialValue: 'ALL',
+          defaultValue: 'ALL',
+        ),
+      ],
+      sort: SortConfig<String>(
+        title: 'Sort Order',
+        options: const [
+          SortOptionItem(value: 'default', label: 'Default Order', icon: Icons.sort),
+          SortOptionItem(value: 'duration_desc', label: 'Duration: Longest First', icon: Icons.hourglass_top),
+          SortOptionItem(value: 'duration_asc', label: 'Duration: Shortest First', icon: Icons.hourglass_bottom),
+          SortOptionItem(value: 'marks_desc', label: 'Total Marks: Highest First', icon: Icons.grade),
+        ],
+        initialValue: _selectedSort,
+        defaultValue: 'default',
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedBatch = result.getFilter('batch', 'ALL');
+        _selectedSubject = result.getFilter('subject', 'ALL');
+        _selectedStatus = result.getFilter('status', 'ALL');
+        _selectedSort = result.sortValue ?? 'default';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final testsAsync = ref.watch(cbtTestsProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tests & Quizzes (CBT)', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          FilterBadgeButton(
+            activeCount: _activeCount,
+            tooltip: 'Filter & Sort Tests',
+            onPressed: () {
+              final tests = testsAsync.valueOrNull ?? [];
+              _openFilterSortSheet(tests);
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.invalidate(cbtTestsProvider),
@@ -28,42 +126,83 @@ class CbtTestsScreen extends ConsumerWidget {
         ),
         data: (tests) {
           if (tests.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceLight.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(Icons.quiz_outlined, color: AppColors.slate400, size: 36),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No online tests scheduled',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Computer-based timed tests and quizzes will appear here.',
-                    style: TextStyle(color: AppColors.slate400, fontSize: 13),
-                  ),
-                ],
-              ),
+            return const EmptyState(
+              icon: Icons.quiz_outlined,
+              title: 'No online tests scheduled',
+              subtitle: 'Computer-based timed tests and quizzes will appear here.',
             );
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: tests.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final item = tests[index];
-              return _buildTestCard(context, ref, item);
-            },
+          var filtered = tests.where((item) {
+            if (_selectedBatch != 'ALL' && (item.batchName ?? '') != _selectedBatch) return false;
+            if (_selectedSubject != 'ALL' && (item.subject ?? '') != _selectedSubject) return false;
+            if (_selectedStatus == 'UNATTEMPTED' && item.isAttempted) return false;
+            if (_selectedStatus == 'ATTEMPTED' && !item.isAttempted) return false;
+            return true;
+          }).toList();
+
+          if (_selectedSort == 'duration_desc') {
+            filtered.sort((a, b) => b.durationMin.compareTo(a.durationMin));
+          } else if (_selectedSort == 'duration_asc') {
+            filtered.sort((a, b) => a.durationMin.compareTo(b.durationMin));
+          } else if (_selectedSort == 'marks_desc') {
+            filtered.sort((a, b) => b.totalMarks.compareTo(a.totalMarks));
+          }
+
+          return Column(
+            children: [
+              if (_activeCount > 0)
+                ActiveFiltersBar(
+                  chips: [
+                    if (_selectedBatch != 'ALL')
+                      ActiveFilterChipData(
+                        label: 'Batch: $_selectedBatch',
+                        onRemoved: () => setState(() => _selectedBatch = 'ALL'),
+                      ),
+                    if (_selectedSubject != 'ALL')
+                      ActiveFilterChipData(
+                        label: 'Subject: $_selectedSubject',
+                        onRemoved: () => setState(() => _selectedSubject = 'ALL'),
+                      ),
+                    if (_selectedStatus != 'ALL')
+                      ActiveFilterChipData(
+                        label: 'Status: ${_selectedStatus == 'ATTEMPTED' ? 'Attempted' : 'Unattempted'}',
+                        onRemoved: () => setState(() => _selectedStatus = 'ALL'),
+                      ),
+                    if (_selectedSort != 'default')
+                      ActiveFilterChipData(
+                        label: _selectedSort == 'duration_desc'
+                            ? 'Longest duration'
+                            : _selectedSort == 'duration_asc'
+                                ? 'Shortest duration'
+                                : 'Highest marks',
+                        onRemoved: () => setState(() => _selectedSort = 'default'),
+                      ),
+                  ],
+                  onClearAll: _resetFilters,
+                ),
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(
+                        child: EmptyState(
+                          icon: Icons.filter_list_off,
+                          title: 'No matching tests',
+                          subtitle: 'No tests match the selected filter criteria.',
+                          buttonText: 'Reset Filters',
+                          onAction: _resetFilters,
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final item = filtered[index];
+                          return _buildTestCard(context, ref, item);
+                        },
+                      ),
+              ),
+            ],
           );
         },
       ),
@@ -74,14 +213,21 @@ class CbtTestsScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: item.isAttempted
-              ? const Color(0xFF10B981).withValues(alpha: 0.5)
-              : const Color(0xFF334155),
+              ? AppColors.success.withValues(alpha: 0.5)
+              : AppColors.borderLight,
           width: 1.2,
         ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,41 +238,41 @@ class CbtTestsScreen extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                    color: AppColors.skyBlueLight,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     item.subject ?? item.batchName!,
-                    style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: AppColors.skyBlue, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(width: 8),
               ],
               Text('${item.durationMin} mins • ${item.totalMarks} marks',
-                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                  style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
               const Spacer(),
               if (item.isAttempted)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                    color: AppColors.successLight,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     'Score: ${item.myScore}/${item.totalMarks}',
-                    style: const TextStyle(color: Color(0xFF10B981), fontSize: 11, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 )
               else
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                    color: AppColors.warningLight,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: const Text(
                     'Ready to Start',
-                    style: TextStyle(color: Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: AppColors.warning, fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
             ],
@@ -134,18 +280,18 @@ class CbtTestsScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           Text(
             item.title,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            style: const TextStyle(color: AppColors.textLight, fontSize: 16, fontWeight: FontWeight.bold),
           ),
           if (item.description != null) ...[
             const SizedBox(height: 4),
-            Text(item.description!, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
+            Text(item.description!, style: const TextStyle(color: AppColors.slate500, fontSize: 13)),
           ],
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.format_list_numbered, size: 14, color: Color(0xFF94A3B8)),
+              const Icon(Icons.format_list_numbered, size: 14, color: AppColors.slate500),
               const SizedBox(width: 4),
-              Text('${item.questionsCount} Questions', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+              Text('${item.questionsCount} Questions', style: const TextStyle(color: AppColors.slate500, fontSize: 12)),
               const Spacer(),
               if (!item.isAttempted)
                 ElevatedButton.icon(
@@ -153,8 +299,19 @@ class CbtTestsScreen extends ConsumerWidget {
                   icon: const Icon(Icons.play_arrow, size: 14),
                   label: const Text('Start Test', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF38BDF8),
-                    foregroundColor: Colors.black,
+                    backgroundColor: AppColors.skyBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  ),
+                )
+              else
+                OutlinedButton.icon(
+                  key: Key('share_test_${item.id}'),
+                  onPressed: () => _openShareCard(context, ref, item),
+                  icon: const Icon(Icons.share, size: 14, color: AppColors.skyBlue),
+                  label: const Text('Share Score', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.skyBlue)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.skyBlue),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   ),
                 ),
@@ -171,6 +328,53 @@ class CbtTestsScreen extends ConsumerWidget {
       barrierDismissible: false,
       builder: (ctx) => _CbtQuizRunnerDialog(testId: testId),
     );
+  }
+
+  void _openShareCard(BuildContext context, WidgetRef ref, CbtTestModel item) async {
+    final client = ref.read(apiClientProvider);
+    String? attemptId = item.myAttemptId;
+
+    if (attemptId == null || attemptId.isEmpty) {
+      try {
+        final repo = ref.read(learningRepositoryProvider);
+        final fullTest = await repo.getTestDetails(item.id);
+        attemptId = fullTest.myAttemptId;
+      } catch (_) {}
+    }
+
+    if (attemptId != null && attemptId.isNotEmpty) {
+      try {
+        final res = await client.dio.get(Endpoints.testShare(attemptId));
+        final data = res.data as Map<String, dynamic>;
+        final payload = data['data'] as Map<String, dynamic>? ?? data;
+        final share = TestShareModel.fromJson(payload);
+        if (context.mounted) {
+          TestScoreShareCard.show(context, share);
+        }
+        return;
+      } catch (_) {}
+    }
+
+    if (context.mounted) {
+      final fallbackShare = TestShareModel(
+        attemptId: attemptId ?? item.id,
+        testId: item.id,
+        testTitle: item.title,
+        durationMin: item.durationMin,
+        batchName: item.batchName,
+        subject: item.subject,
+        studentName: 'Verified Student',
+        score: item.myScore ?? 0,
+        totalMarks: item.totalMarks,
+        percentage: item.totalMarks > 0 ? ((item.myScore ?? 0) * 100 ~/ item.totalMarks) : 0,
+        status: 'EVALUATED',
+        instituteName: 'Classora Academy',
+        instituteCode: 'APEX01',
+        deepLink: 'classora://test-result?attemptId=${attemptId ?? item.id}&code=APEX01',
+        webLink: 'https://classora.app/test-result?attemptId=${attemptId ?? item.id}&code=APEX01',
+      );
+      TestScoreShareCard.show(context, fallbackShare);
+    }
   }
 }
 
@@ -213,26 +417,45 @@ class _CbtQuizRunnerDialogState extends ConsumerState<_CbtQuizRunnerDialog> {
 
     if (mounted) {
       Navigator.pop(context);
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF0F172A),
-          title: const Text('Test Completed! 🎉', style: TextStyle(color: Colors.white)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Your Score: ${result['score']} / ${result['totalMarks']}',
-                  style: const TextStyle(color: Color(0xFF10B981), fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              Text('Percentage: ${result['percentage']}%', style: const TextStyle(color: Colors.white70)),
-            ],
-          ),
-          actions: [
-            ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-          ],
-        ),
-      );
+
+      final attemptId = result['attemptId']?.toString();
+      TestShareModel? shareModel;
+      if (attemptId != null && attemptId.isNotEmpty) {
+        try {
+          final client = ref.read(apiClientProvider);
+          final res = await client.dio.get(Endpoints.testShare(attemptId));
+          final data = res.data as Map<String, dynamic>;
+          final payload = data['data'] as Map<String, dynamic>? ?? data;
+          shareModel = TestShareModel.fromJson(payload);
+        } catch (_) {}
+      }
+
+      if (shareModel == null) {
+        final score = (result['score'] as num?)?.toInt() ?? 0;
+        final totalMarks = (result['totalMarks'] as num?)?.toInt() ?? (_test?.totalMarks ?? 100);
+        final pct = (result['percentage'] as num?)?.toInt() ?? (totalMarks > 0 ? (score * 100 ~/ totalMarks) : 0);
+        shareModel = TestShareModel(
+          attemptId: attemptId ?? '',
+          testId: widget.testId,
+          testTitle: _test?.title ?? 'CBT Test',
+          durationMin: _test?.durationMin ?? 30,
+          batchName: _test?.batchName,
+          subject: _test?.subject,
+          studentName: 'Verified Student',
+          score: score,
+          totalMarks: totalMarks,
+          percentage: pct,
+          status: result['status']?.toString() ?? 'EVALUATED',
+          instituteName: 'Classora Academy',
+          instituteCode: 'APEX01',
+          deepLink: 'classora://test-result?attemptId=${attemptId ?? ''}&code=APEX01',
+          webLink: 'https://classora.app/test-result?attemptId=${attemptId ?? ''}&code=APEX01',
+        );
+      }
+
+      if (mounted) {
+        TestScoreShareCard.show(context, shareModel);
+      }
     }
   }
 

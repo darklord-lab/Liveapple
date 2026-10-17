@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../batch/presentation/batch_controller.dart';
+import '../../liveclass/presentation/live_class_controller.dart';
 import 'timetable_controller.dart';
 import '../../../core/errors/app_exception.dart';
 
@@ -14,6 +15,20 @@ class AddTimetableSlotDialog extends ConsumerStatefulWidget {
     this.preselectedBatchId,
     this.preselectedDay,
   });
+
+  static Future<bool?> show(
+    BuildContext context, {
+    String? preselectedBatchId,
+    int? preselectedDay,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AddTimetableSlotDialog(
+        preselectedBatchId: preselectedBatchId,
+        preselectedDay: preselectedDay,
+      ),
+    );
+  }
 
   @override
   ConsumerState<AddTimetableSlotDialog> createState() => _AddTimetableSlotDialogState();
@@ -52,6 +67,10 @@ class _AddTimetableSlotDialogState extends ConsumerState<AddTimetableSlotDialog>
     final picked = await showTimePicker(
       context: context,
       initialTime: _startTime,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        child: child!,
+      ),
     );
     if (picked != null) {
       setState(() {
@@ -66,6 +85,10 @@ class _AddTimetableSlotDialogState extends ConsumerState<AddTimetableSlotDialog>
     final picked = await showTimePicker(
       context: context,
       initialTime: _endTime,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        child: child!,
+      ),
     );
     if (picked != null) {
       setState(() {
@@ -107,11 +130,17 @@ class _AddTimetableSlotDialogState extends ConsumerState<AddTimetableSlotDialog>
             recurring: _recurring,
           );
 
+      // Immediately refresh upcoming classes so home dashboard notify meter updates in real-time
+      ref.invalidate(liveClassProvider);
+      try {
+        await ref.read(liveClassProvider.notifier).generateUpcoming(daysAhead: 7);
+      } catch (_) {}
+
       if (mounted) {
         Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Timetable slot added successfully!'),
+            content: Text('Timetable slot added & live schedule synced!'),
             backgroundColor: AppColors.success,
           ),
         );
@@ -139,10 +168,11 @@ class _AddTimetableSlotDialogState extends ConsumerState<AddTimetableSlotDialog>
       child: Container(
         padding: const EdgeInsets.all(24),
         constraints: const BoxConstraints(maxWidth: 480),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Row(
               children: [
                 Container(
@@ -323,6 +353,7 @@ class _AddTimetableSlotDialogState extends ConsumerState<AddTimetableSlotDialog>
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

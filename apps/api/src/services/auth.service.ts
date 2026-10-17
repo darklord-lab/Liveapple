@@ -1,9 +1,11 @@
+import path from 'path';
 import { prisma } from '../utils/prisma.js';
 import { hashPassword, verifyPassword, hashToken, generateRandomToken } from '../utils/hash.js';
 import { signAccessToken, TokenUserPayload } from '../utils/jwt.js';
 import { AppError } from '../errors/AppError.js';
 import { env } from '../config/env.js';
 import { logAudit } from './audit.service.js';
+import { avatarStorageService, UploadedFileInput } from './storage.service.js';
 
 export interface LoginParams {
   email: string;
@@ -14,6 +16,10 @@ export interface LoginParams {
 export interface AuthResult {
   accessToken: string;
   refreshToken: string;
+  tokens?: {
+    accessToken: string;
+    refreshToken: string;
+  };
   user: {
     id: string;
     instituteId: string;
@@ -21,6 +27,8 @@ export interface AuthResult {
     name: string;
     email: string;
     phone: string | null;
+    avatarUrl?: string | null;
+    notificationPrefs?: string | null;
     status: string;
     coachingName?: string | null;
     centreLogo?: string | null;
@@ -33,6 +41,10 @@ export interface AuthResult {
     id: string;
     name: string;
     slug: string;
+    code?: string | null;
+    logoUrl?: string | null;
+    primaryColor?: string | null;
+    tagline?: string | null;
   };
   teacher?: {
     id: string;
@@ -125,6 +137,8 @@ export class AuthService {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        avatarUrl: user.avatarUrl,
+        notificationPrefs: user.notificationPrefs,
         status: user.status,
         coachingName: user.coachingName,
         centreLogo: user.centreLogo,
@@ -137,6 +151,10 @@ export class AuthService {
         id: user.institute.id,
         name: user.institute.name,
         slug: user.institute.slug,
+        code: user.institute.code,
+        logoUrl: user.institute.logoUrl,
+        primaryColor: user.institute.primaryColor,
+        tagline: user.institute.tagline,
       },
       teacher: user.creatorTeacher
         ? {
@@ -285,6 +303,7 @@ export class AuthService {
   static async acceptInvite(params: {
     inviteCode: string;
     password: string;
+    email?: string;
     name?: string;
     phone?: string;
     deviceId?: string;
@@ -296,62 +315,132 @@ export class AuthService {
       include: { institute: true },
     });
 
-    if (!invite) {
-      throw new AppError('INVALID_INVITE', 'Invite link or code is invalid', 400);
-    }
+    let user: any;
 
-    if (invite.usedAt !== null) {
-      throw new AppError('INVITE_ALREADY_USED', 'This invite code has already been used', 400);
-    }
+    if (invite) {
+      if (invite.usedAt !== null) {
+        throw new AppError('INVITE_ALREADY_USED', 'This invite code has already been used', 400);
+      }
 
-    if (invite.expiresAt < new Date()) {
-      throw new AppError('INVITE_EXPIRED', 'This invite code has expired (48-hour limit)', 400);
-    }
+      if (invite.expiresAt < new Date()) {
+        throw new AppError('INVITE_EXPIRED', 'This invite code has expired (48-hour limit)', 400);
+      }
 
-    const email = invite.email?.toLowerCase().trim();
-    if (!email) {
-      throw new AppError('BAD_REQUEST', 'Invite does not have an associated email', 400);
-    }
+      const email = invite.email?.toLowerCase().trim();
+      if (!email) {
+        throw new AppError('BAD_REQUEST', 'Invite does not have an associated email', 400);
+      }
 
-    // Check if user already exists in this institute
-    const existingUser = await prisma.user.findFirst({
-      where: { instituteId: invite.instituteId, email },
-    });
+      // Check if user already exists in this institute
+      const existingUser = await prisma.user.findFirst({
+        where: { instituteId: invite.instituteId, email },
+      });
 
-    const passwordHash = await hashPassword(params.password);
-    let user;
+      const passwordHash = await hashPassword(params.password);
 
-    if (existingUser) {
-      user = await prisma.user.update({
-        where: { id: existingUser.id },
-        data: {
-          passwordHash,
-          name: params.name?.trim() || existingUser.name,
-          phone: params.phone?.trim() || existingUser.phone,
-          status: 'ACTIVE',
-        },
-        include: { institute: true },
+      if (existingUser) {
+        user = await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            passwordHash,
+            name: params.name?.trim() || existingUser.name,
+            phone: params.phone?.trim() || existingUser.phone,
+            status: 'ACTIVE',
+          },
+          include: { institute: true },
+        });
+      } else {
+        user = await prisma.user.create({
+          data: {
+            instituteId: invite.instituteId,
+            email,
+            role: invite.role,
+            name: params.name?.trim() || email.split('@')[0],
+            phone: params.phone?.trim() || invite.phone,
+            passwordHash,
+            status: 'ACTIVE',
+          },
+          include: { institute: true },
+        });
+      }
+
+      // Mark invite as used
+      await prisma.invite.update({
+        where: { id: invite.id },
+        data: { usedAt: new Date() },
       });
     } else {
-      user = await prisma.user.create({
-        data: {
-          instituteId: invite.instituteId,
-          email,
-          role: invite.role,
-          name: params.name?.trim() || email.split('@')[0],
-          phone: params.phone?.trim() || invite.phone,
-          passwordHash,
-          status: 'ACTIVE',
+      // Check if this is a Batch Join Code (case-insensitive)
+      const code = params.inviteCode.trim();
+      const batch = await prisma.batch.findFirst({
+        where: {
+          OR: [
+            { joinCode: code },
+            { joinCode: code.toUpperCase() },
+          ],
         },
-        include: { institute: true },
+        include: { institute: true, teacher: true },
       });
-    }
 
-    // Mark invite as used
-    await prisma.invite.update({
-      where: { id: invite.id },
-      data: { usedAt: new Date() },
-    });
+      if (!batch) {
+        throw new AppError('INVALID_INVITE', 'Invite link or batch code is invalid', 400);
+      }
+
+      // Determine student email
+      const studentEmail = (
+        params.email?.toLowerCase().trim() ||
+        (params.phone?.trim() ? `student_${params.phone.trim().replace(/\D/g, '')}@student.classora.edu` : `student_${Date.now().toString(36)}@student.classora.edu`)
+      );
+
+      const existingUser = await prisma.user.findFirst({
+        where: { instituteId: batch.instituteId, email: studentEmail },
+      });
+
+      const passwordHash = await hashPassword(params.password);
+
+      if (existingUser) {
+        user = await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            passwordHash,
+            name: params.name?.trim() || existingUser.name,
+            phone: params.phone?.trim() || existingUser.phone,
+            status: 'ACTIVE',
+          },
+          include: { institute: true },
+        });
+      } else {
+        user = await prisma.user.create({
+          data: {
+            instituteId: batch.instituteId,
+            email: studentEmail,
+            role: 'STUDENT',
+            name: params.name?.trim() || studentEmail.split('@')[0],
+            phone: params.phone?.trim(),
+            passwordHash,
+            status: 'ACTIVE',
+            creatorTeacherId: batch.teacherId,
+          },
+          include: { institute: true },
+        });
+      }
+
+      // Auto-enroll in the batch if not already enrolled
+      const existingEnrollment = await prisma.enrollment.findFirst({
+        where: { batchId: batch.id, studentId: user.id },
+      });
+
+      if (!existingEnrollment) {
+        await prisma.enrollment.create({
+          data: {
+            instituteId: batch.instituteId,
+            batchId: batch.id,
+            studentId: user.id,
+            status: 'ACTIVE',
+          },
+        });
+      }
+    }
 
     // 1. Generate Access Token
     const tokenPayload: TokenUserPayload = {
@@ -384,7 +473,7 @@ export class AuthService {
       actorId: user.id,
       action: 'INVITE_ACCEPTED',
       entity: 'AUTH',
-      meta: { inviteId: invite.id, role: invite.role },
+      meta: invite ? { inviteId: invite.id, role: invite.role } : { code: params.inviteCode.trim(), role: 'STUDENT' },
     });
 
     return {
@@ -397,13 +486,135 @@ export class AuthService {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        avatarUrl: user.avatarUrl,
+        notificationPrefs: user.notificationPrefs,
         status: user.status,
       },
       institute: {
         id: user.institute.id,
         name: user.institute.name,
         slug: user.institute.slug,
+        code: user.institute.code,
+        logoUrl: user.institute.logoUrl,
+        primaryColor: user.institute.primaryColor,
+        tagline: user.institute.tagline,
       },
     };
+  }
+
+  /**
+   * Update profile details (name, phone, notification preferences)
+   */
+  static async updateProfile(
+    userId: string,
+    data: {
+      name?: string;
+      phone?: string | null;
+      notificationPrefs?: string | Record<string, boolean>;
+    }
+  ) {
+    const updatePayload: {
+      name?: string;
+      phone?: string | null;
+      notificationPrefs?: string;
+    } = {};
+
+    if (data.name !== undefined) {
+      updatePayload.name = data.name.trim();
+    }
+    if (data.phone !== undefined) {
+      updatePayload.phone = data.phone && data.phone.trim().length > 0 ? data.phone.trim() : null;
+    }
+    if (data.notificationPrefs !== undefined) {
+      updatePayload.notificationPrefs =
+        typeof data.notificationPrefs === 'string'
+          ? data.notificationPrefs
+          : JSON.stringify(data.notificationPrefs);
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updatePayload,
+      include: {
+        institute: {
+          select: { id: true, name: true, slug: true, plan: true },
+        },
+        creatorTeacher: true,
+      },
+    });
+
+    await logAudit({
+      instituteId: updatedUser.instituteId,
+      actorId: userId,
+      action: 'PROFILE_UPDATED',
+      entity: 'USER',
+      meta: { updatedFields: Object.keys(updatePayload) },
+    });
+
+    return updatedUser;
+  }
+
+  /**
+   * Upload user avatar photo and save URL
+   */
+  static async uploadAvatar(userId: string, file: UploadedFileInput) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new AppError('NOT_FOUND', 'User record not found', 404);
+    }
+
+    // Save avatar through avatarStorageService
+    const result = await avatarStorageService.put(file);
+    const avatarUrl = `/api/v1/auth/avatar/${result.key}`;
+
+    // Clean up old avatar if it was stored locally
+    if (user.avatarUrl && user.avatarUrl.includes('/v1/auth/avatar/')) {
+      const oldKey = user.avatarUrl.split('/v1/auth/avatar/')[1];
+      if (oldKey) {
+        await avatarStorageService.delete(oldKey);
+      }
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl },
+      include: {
+        institute: {
+          select: { id: true, name: true, slug: true, plan: true },
+        },
+        creatorTeacher: true,
+      },
+    });
+
+    await logAudit({
+      instituteId: user.instituteId,
+      actorId: userId,
+      action: 'AVATAR_UPDATED',
+      entity: 'USER',
+      meta: { key: result.key, sizeBytes: result.sizeBytes },
+    });
+
+    return {
+      avatarUrl,
+      user: updatedUser,
+    };
+  }
+
+  /**
+   * Stream avatar file
+   */
+  static getAvatarStream(key: string) {
+    const mimeMap: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+    };
+    const ext = path.extname(key).toLowerCase();
+    const mimeType = mimeMap[ext] || 'application/octet-stream';
+    const stream = avatarStorageService.getStream(key);
+    return { stream, mimeType };
   }
 }

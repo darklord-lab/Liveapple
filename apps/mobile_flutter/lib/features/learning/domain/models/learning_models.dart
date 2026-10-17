@@ -232,6 +232,7 @@ class CbtTestModel {
   final int questionsCount;
   final bool isAttempted;
   final int? myScore;
+  final String? myAttemptId;
   final String? batchName;
   final String? subject;
   final List<CbtQuestionModel> questions;
@@ -245,6 +246,7 @@ class CbtTestModel {
     required this.questionsCount,
     required this.isAttempted,
     this.myScore,
+    this.myAttemptId,
     this.batchName,
     this.subject,
     this.questions = const [],
@@ -264,6 +266,7 @@ class CbtTestModel {
       questionsCount: (json['questionsCount'] as num?)?.toInt() ?? rawQuestions.length,
       isAttempted: json['isAttempted'] == true || myAtt != null,
       myScore: (myAtt?['score'] as num?)?.toInt(),
+      myAttemptId: myAtt?['id']?.toString() ?? json['attemptId']?.toString(),
       batchName: batch?['name']?.toString(),
       subject: batch?['subject']?.toString(),
       questions: rawQuestions

@@ -43,6 +43,9 @@ async function resetDemo() {
       id: 'inst-apex-01',
       name: 'Apex IIT-JEE & Medical Academy',
       slug: 'apex',
+      code: 'APEX01',
+      primaryColor: '#0A9BE8',
+      tagline: 'Premier IIT-JEE & Medical Academy',
       plan: 'ENTERPRISE',
     },
   });

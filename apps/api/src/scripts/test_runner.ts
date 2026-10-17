@@ -55,7 +55,7 @@ if (seedRes.status !== 0) {
 
 // 5. Run tests against test.db
 console.log('🚀 [TEST RUNNER] Running test suite against test.db...');
-const testRes = spawnSync('npx', ['tsx', '--test', 'src/tests/**/*.test.ts'], {
+const testRes = spawnSync('npx', ['tsx', '--test', '--test-concurrency=1', 'src/tests/**/*.test.ts'], {
   env,
   stdio: 'inherit',
   shell: true,

@@ -95,6 +95,9 @@ class LiveClassRoomState {
   final bool isScreenSharing;
   final bool isWhiteboardOpen;
   final bool isBoardAllowed;
+  final bool isDocPresenting;
+  final String docTitle;
+  final int docPage;
   final String? activeSpeakerName;
   final List<ClassParticipant> participants;
   final List<ChatMessageItem> chatMessages;
@@ -103,6 +106,7 @@ class LiveClassRoomState {
   final List<InClassPollItem> polls;
   final bool isHandRaised;
   final bool isClassEnded;
+  final bool isRoomLocked;
   final lk.LocalVideoTrack? localVideoTrack;
   final lk.LocalAudioTrack? localAudioTrack;
   final Map<String, lk.VideoTrack> remoteVideoTracks;
@@ -119,6 +123,9 @@ class LiveClassRoomState {
     this.isScreenSharing = false,
     this.isWhiteboardOpen = false,
     this.isBoardAllowed = false,
+    this.isDocPresenting = false,
+    this.docTitle = '',
+    this.docPage = 1,
     this.activeSpeakerName,
     this.participants = const [],
     this.chatMessages = const [],
@@ -127,6 +134,7 @@ class LiveClassRoomState {
     this.polls = const [],
     this.isHandRaised = false,
     this.isClassEnded = false,
+    this.isRoomLocked = false,
     this.localVideoTrack,
     this.localAudioTrack,
     this.remoteVideoTracks = const {},
@@ -144,6 +152,9 @@ class LiveClassRoomState {
     bool? isScreenSharing,
     bool? isWhiteboardOpen,
     bool? isBoardAllowed,
+    bool? isDocPresenting,
+    String? docTitle,
+    int? docPage,
     String? activeSpeakerName,
     List<ClassParticipant>? participants,
     List<ChatMessageItem>? chatMessages,
@@ -152,6 +163,7 @@ class LiveClassRoomState {
     List<InClassPollItem>? polls,
     bool? isHandRaised,
     bool? isClassEnded,
+    bool? isRoomLocked,
     lk.LocalVideoTrack? localVideoTrack,
     lk.LocalAudioTrack? localAudioTrack,
     Map<String, lk.VideoTrack>? remoteVideoTracks,
@@ -170,6 +182,9 @@ class LiveClassRoomState {
       isScreenSharing: isScreenSharing ?? this.isScreenSharing,
       isWhiteboardOpen: isWhiteboardOpen ?? this.isWhiteboardOpen,
       isBoardAllowed: isBoardAllowed ?? this.isBoardAllowed,
+      isDocPresenting: isDocPresenting ?? this.isDocPresenting,
+      docTitle: docTitle ?? this.docTitle,
+      docPage: docPage ?? this.docPage,
       activeSpeakerName: activeSpeakerName ?? this.activeSpeakerName,
       participants: participants ?? this.participants,
       chatMessages: chatMessages ?? this.chatMessages,
@@ -178,6 +193,7 @@ class LiveClassRoomState {
       polls: polls ?? this.polls,
       isHandRaised: isHandRaised ?? this.isHandRaised,
       isClassEnded: isClassEnded ?? this.isClassEnded,
+      isRoomLocked: isRoomLocked ?? this.isRoomLocked,
       localVideoTrack: clearLocalVideo ? null : (localVideoTrack ?? this.localVideoTrack),
       localAudioTrack: clearLocalAudio ? null : (localAudioTrack ?? this.localAudioTrack),
       remoteVideoTracks: remoteVideoTracks ?? this.remoteVideoTracks,
@@ -467,9 +483,30 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
         }
       });
 
+      // 8b. Document Presentation Sync event (Teacher presents to all students)
+      _socket?.on('doc:present', (data) {
+        if (data is Map) {
+          final isOpen = data['isOpen'] as bool? ?? false;
+          final title = data['title'] as String? ?? '';
+          final page = data['page'] as int? ?? 1;
+          state = state.copyWith(
+            isDocPresenting: isOpen,
+            docTitle: title,
+            docPage: page,
+          );
+        }
+      });
+
       // 9. Class Ended event
       _socket?.on('class:ended', (_) {
         state = state.copyWith(isClassEnded: true, isConnected: false);
+      });
+
+      // 10. Class became LIVE event (teacher started the class while student is in waiting lobby)
+      _socket?.on('class:live', (data) {
+        debugPrint('[SOCKET] class:live received — teacher started the class!');
+        // Re-sync remote participants on LiveKit (teacher may have just started streaming)
+        _syncExistingRemoteParticipants();
       });
 
       _socket?.onDisconnect((_) {
@@ -497,11 +534,34 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
           final updated = Map<String, lk.VideoTrack>.from(state.remoteVideoTracks);
           updated.remove(event.participant.identity);
           state = state.copyWith(remoteVideoTracks: updated);
+        } else if (event is lk.ParticipantConnectedEvent) {
+          // A new remote participant joined — add them to participants list
+          final p = event.participant;
+          final isHostPeer = (p.metadata?.contains('isHost":true') ?? false) ||
+              p.identity.startsWith('teacher') || p.identity.startsWith('admin');
+          final newPeer = ClassParticipant(
+            identity: p.identity,
+            name: p.name.isNotEmpty ? p.name : p.identity,
+            role: isHostPeer ? 'TEACHER' : 'STUDENT',
+            isHost: isHostPeer,
+            isLocal: false,
+            isMicMuted: true,
+            isCameraOff: true,
+          );
+          state = state.copyWith(
+            participants: ClassParticipant.deduplicateAndSort([...state.participants, newPeer]),
+          );
+        } else if (event is lk.ParticipantDisconnectedEvent) {
+          final filtered = state.participants.where((p) => p.identity != event.participant.identity).toList();
+          state = state.copyWith(participants: ClassParticipant.deduplicateAndSort(filtered));
         }
       });
 
       await _liveKitRoom?.connect(serverUrl, token);
       debugPrint('[LIVEKIT] Connected successfully. Connection state: ${_liveKitRoom?.connectionState}');
+
+      // Process already-connected remote participants (teacher may already be streaming)
+      _syncExistingRemoteParticipants();
 
       // If local video/audio tracks are ready and active, publish to SFU
       if (state.localVideoTrack != null && !state.isCameraOff) {
@@ -517,6 +577,53 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
     } catch (e) {
       // Graceful fallback for simulator / non-webrtc environments
       debugPrint('[LIVEKIT] LiveKit initialization note: $e');
+    }
+  }
+
+  /// Sync any already-connected remote participants and their published tracks.
+  /// This is critical when a student joins after the teacher has already started streaming.
+  void _syncExistingRemoteParticipants() {
+    try {
+      final remoteParticipants = _liveKitRoom?.remoteParticipants;
+      if (remoteParticipants == null || remoteParticipants.isEmpty) return;
+
+      final updatedVideoTracks = Map<String, lk.VideoTrack>.from(state.remoteVideoTracks);
+      final newParticipants = List<ClassParticipant>.from(state.participants);
+
+      for (final entry in remoteParticipants.entries) {
+        final p = entry.value;
+        final isHostPeer = (p.metadata?.contains('isHost":true') ?? false) ||
+            p.identity.startsWith('teacher') || p.identity.startsWith('admin');
+
+        // Add to participants list if not already there
+        if (!newParticipants.any((cp) => cp.identity == p.identity)) {
+          newParticipants.add(ClassParticipant(
+            identity: p.identity,
+            name: p.name.isNotEmpty ? p.name : p.identity,
+            role: isHostPeer ? 'TEACHER' : 'STUDENT',
+            isHost: isHostPeer,
+            isLocal: false,
+            isMicMuted: true,
+            isCameraOff: false,
+          ));
+        }
+
+        // Pick up already-published video tracks
+        for (final trackPub in p.videoTrackPublications) {
+          final vt = trackPub.track;
+          if (vt != null) {
+            updatedVideoTracks[p.identity] = vt;
+            debugPrint('[LIVEKIT] Synced existing video track from ${p.identity}');
+          }
+        }
+      }
+
+      state = state.copyWith(
+        remoteVideoTracks: updatedVideoTracks,
+        participants: ClassParticipant.deduplicateAndSort(newParticipants),
+      );
+    } catch (e) {
+      debugPrint('[LIVEKIT] Error syncing existing participants: $e');
     }
   }
 
@@ -632,6 +739,18 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
     }
   }
 
+  void setDocPresentation({required bool isOpen, String title = '', int page = 1}) {
+    state = state.copyWith(isDocPresenting: isOpen, docTitle: title, docPage: page);
+    if (_currentClassId != null && state.isHost) {
+      _socket?.emit('doc:present', {
+        'classId': _currentClassId,
+        'isOpen': isOpen,
+        'title': title,
+        'page': page,
+      });
+    }
+  }
+
   void toggleHandRaise(String userName) {
     if (_currentClassId == null) return;
     final next = !state.isHandRaised;
@@ -679,13 +798,23 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
 
   void grantBoardToStudent(String studentId) {
     if (state.isHost && _currentClassId != null) {
+      _socket?.emit('board:permission:grant', {'classId': _currentClassId, 'studentId': studentId});
       _socket?.emit('board:grant', {'classId': _currentClassId, 'studentId': studentId});
     }
   }
 
   void revokeBoardFromStudent(String studentId) {
     if (state.isHost && _currentClassId != null) {
+      _socket?.emit('board:permission:revoke', {'classId': _currentClassId, 'studentId': studentId});
       _socket?.emit('board:revoke', {'classId': _currentClassId, 'studentId': studentId});
+    }
+  }
+
+  void toggleLockRoom() {
+    final next = !state.isRoomLocked;
+    state = state.copyWith(isRoomLocked: next);
+    if (_currentClassId != null && state.isHost) {
+      _socket?.emit('room:lock', {'classId': _currentClassId, 'isLocked': next});
     }
   }
 

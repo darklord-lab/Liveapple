@@ -178,6 +178,12 @@ export function setupSocketGateway(io: Server) {
       io.to(`class:${data.classId}`).emit('board:state', { isOpen: data.isOpen });
     });
 
+    // Host presents PPT/PDF document slides to all students
+    socket.on('doc:present', (data: { classId: string; isOpen: boolean; title?: string; page?: number; totalPages?: number }) => {
+      if (!isHost) return;
+      io.to(`class:${data.classId}`).emit('doc:present', data);
+    });
+
     // Host grants student drawing permission
     socket.on('board:permission:grant', (data: { classId: string; studentId: string }) => {
       if (!isHost) return;
@@ -215,6 +221,55 @@ export function setupSocketGateway(io: Server) {
         isMicMuted: data.isMicMuted,
         isCameraOff: data.isCameraOff,
       });
+    });
+
+    /* -------------------------------------------------------------------------- */
+    /* WEBRTC P2P SIGNALING RELAY (FALLBACK / DIRECT SFU STREAMING)               */
+    /* -------------------------------------------------------------------------- */
+    socket.on('signal:offer', (data: { classId: string; sdp: any; targetUserId?: string }) => {
+      if (data.targetUserId) {
+        socket.to(`user:${data.targetUserId}`).emit('signal:offer', {
+          senderId: user.userId,
+          senderName: user.name,
+          sdp: data.sdp,
+        });
+      } else {
+        socket.to(`class:${data.classId}`).emit('signal:offer', {
+          senderId: user.userId,
+          senderName: user.name,
+          sdp: data.sdp,
+        });
+      }
+    });
+
+    socket.on('signal:answer', (data: { classId: string; sdp: any; targetUserId?: string }) => {
+      if (data.targetUserId) {
+        socket.to(`user:${data.targetUserId}`).emit('signal:answer', {
+          senderId: user.userId,
+          senderName: user.name,
+          sdp: data.sdp,
+        });
+      } else {
+        socket.to(`class:${data.classId}`).emit('signal:answer', {
+          senderId: user.userId,
+          senderName: user.name,
+          sdp: data.sdp,
+        });
+      }
+    });
+
+    socket.on('signal:candidate', (data: { classId: string; candidate: any; targetUserId?: string }) => {
+      if (data.targetUserId) {
+        socket.to(`user:${data.targetUserId}`).emit('signal:candidate', {
+          senderId: user.userId,
+          candidate: data.candidate,
+        });
+      } else {
+        socket.to(`class:${data.classId}`).emit('signal:candidate', {
+          senderId: user.userId,
+          candidate: data.candidate,
+        });
+      }
     });
 
     /* -------------------------------------------------------------------------- */

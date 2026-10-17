@@ -53,7 +53,7 @@ class _BatchStudentsDialogState extends ConsumerState<BatchStudentsDialog> {
   void _showAddStudentModal() {
     showDialog(
       context: context,
-      builder: (ctx) => _AddStudentDirectDialog(
+      builder: (ctx) => AddStudentDirectDialog(
         batchId: widget.batch.id,
         onSuccess: () => _loadStudents(),
       ),
@@ -63,7 +63,7 @@ class _BatchStudentsDialogState extends ConsumerState<BatchStudentsDialog> {
   void _showBulkEnrollModal() {
     showDialog(
       context: context,
-      builder: (ctx) => _BulkEnrollDialog(
+      builder: (ctx) => BulkEnrollDialog(
         batchId: widget.batch.id,
         onSuccess: () => _loadStudents(),
       ),
@@ -245,17 +245,17 @@ class _BatchStudentsDialogState extends ConsumerState<BatchStudentsDialog> {
   }
 }
 
-class _AddStudentDirectDialog extends StatefulWidget {
+class AddStudentDirectDialog extends StatefulWidget {
   final String batchId;
   final VoidCallback onSuccess;
 
-  const _AddStudentDirectDialog({required this.batchId, required this.onSuccess});
+  const AddStudentDirectDialog({super.key, required this.batchId, required this.onSuccess});
 
   @override
-  State<_AddStudentDirectDialog> createState() => _AddStudentDirectDialogState();
+  State<AddStudentDirectDialog> createState() => _AddStudentDirectDialogState();
 }
 
-class _AddStudentDirectDialogState extends State<_AddStudentDirectDialog> {
+class _AddStudentDirectDialogState extends State<AddStudentDirectDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -407,17 +407,17 @@ class _AddStudentDirectDialogState extends State<_AddStudentDirectDialog> {
   }
 }
 
-class _BulkEnrollDialog extends StatefulWidget {
+class BulkEnrollDialog extends StatefulWidget {
   final String batchId;
   final VoidCallback onSuccess;
 
-  const _BulkEnrollDialog({required this.batchId, required this.onSuccess});
+  const BulkEnrollDialog({super.key, required this.batchId, required this.onSuccess});
 
   @override
-  State<_BulkEnrollDialog> createState() => _BulkEnrollDialogState();
+  State<BulkEnrollDialog> createState() => _BulkEnrollDialogState();
 }
 
-class _BulkEnrollDialogState extends State<_BulkEnrollDialog> {
+class _BulkEnrollDialogState extends State<BulkEnrollDialog> {
   final _csvController = TextEditingController();
   bool _isLoading = false;
   BulkEnrollResultModel? _report;

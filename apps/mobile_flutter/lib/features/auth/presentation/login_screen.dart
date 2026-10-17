@@ -8,6 +8,8 @@ import '../../../core/network/endpoints.dart';
 import '../../../core/storage/secure_storage.dart';
 import 'auth_controller.dart';
 import '../domain/auth_state.dart';
+import '../../institute/presentation/institute_branding_controller.dart';
+import '../../institute/presentation/institute_code_dialog.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -18,8 +20,17 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'teacher1@apex.edu');
-  final _passwordController = TextEditingController(text: 'Password@123');
+  // Default to empty for production security; demo chips available in debug/demo builds
+  final _emailController = TextEditingController(
+    text: (kDebugMode || const bool.fromEnvironment('DEMO_MODE', defaultValue: false))
+        ? 'teacher1@apex.edu'
+        : '',
+  );
+  final _passwordController = TextEditingController(
+    text: (kDebugMode || const bool.fromEnvironment('DEMO_MODE', defaultValue: false))
+        ? 'Password@123'
+        : '',
+  );
   bool _obscurePassword = true;
   int _logoTapCount = 0;
 
@@ -59,11 +70,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
               Icon(Icons.dns_outlined, color: AppColors.primary),
               SizedBox(width: 8),
-              Text('Server Connection'),
+              Text('Server Connection', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ],
           ),
           content: SingleChildScrollView(
@@ -72,7 +84,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Select a server preset or enter your backend URL:',
+                  'Select a server preset or enter backend URL:',
                   style: TextStyle(fontSize: 12, color: AppColors.textMutedLight),
                 ),
                 const SizedBox(height: 12),
@@ -81,8 +93,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   runSpacing: 8,
                   children: [
                     ActionChip(
-                      avatar: const Icon(Icons.cloud_done, size: 16, color: Colors.blue),
-                      label: const Text('Cloudflare (Live)', style: TextStyle(fontSize: 12)),
+                      avatar: const Icon(Icons.cloud_done, size: 16, color: AppColors.primary),
+                      label: const Text('Cloudflare (Live)', style: TextStyle(fontSize: 11)),
                       onPressed: () {
                         setModalState(() {
                           urlController.text = Endpoints.cloudflareTunnelUrl;
@@ -91,8 +103,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       },
                     ),
                     ActionChip(
-                      avatar: const Icon(Icons.wifi, size: 16, color: Colors.green),
-                      label: const Text('Wi-Fi PC', style: TextStyle(fontSize: 12)),
+                      avatar: const Icon(Icons.wifi, size: 16, color: AppColors.success),
+                      label: const Text('Wi-Fi PC', style: TextStyle(fontSize: 11)),
                       onPressed: () {
                         setModalState(() {
                           urlController.text = Endpoints.localWifiUrl;
@@ -101,8 +113,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       },
                     ),
                     ActionChip(
-                      avatar: const Icon(Icons.android, size: 16, color: Colors.orange),
-                      label: const Text('Emulator', style: TextStyle(fontSize: 12)),
+                      avatar: const Icon(Icons.android, size: 16, color: AppColors.warning),
+                      label: const Text('Emulator', style: TextStyle(fontSize: 11)),
                       onPressed: () {
                         setModalState(() {
                           urlController.text = Endpoints.emulatorUrl;
@@ -115,10 +127,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: urlController,
-                  decoration: const InputDecoration(
+                  style: const TextStyle(fontSize: 13),
+                  decoration: InputDecoration(
                     labelText: 'API Base URL',
                     hintText: 'https://....trycloudflare.com/api',
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -128,6 +142,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
                       onPressed: isTesting
                           ? null
@@ -153,15 +168,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 setModalState(() {
                                   isTesting = false;
                                   if (res.statusCode == 200) {
-                                    testStatus = '✅ Connected! Server is online.';
+                                    testStatus = '✅ Connected! Server online.';
                                   } else {
-                                    testStatus = '⚠️ Server responded with code ${res.statusCode}';
+                                    testStatus = '⚠️ Status code: ${res.statusCode}';
                                   }
                                 });
                               } catch (e) {
                                 setModalState(() {
                                   isTesting = false;
-                                  testStatus = '❌ Could not connect to this URL.';
+                                  testStatus = '❌ Could not connect.';
                                 });
                               }
                             },
@@ -172,7 +187,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
                           : const Icon(Icons.network_check, size: 16),
-                      label: const Text('Test Connection', style: TextStyle(fontSize: 12)),
+                      label: const Text('Test Connection', style: TextStyle(fontSize: 11)),
                     ),
                   ],
                 ),
@@ -183,7 +198,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: testStatus.startsWith('✅') ? Colors.green : Colors.red,
+                      color: testStatus.startsWith('✅') ? AppColors.success : AppColors.error,
                     ),
                   ),
                 ],
@@ -193,9 +208,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: const Text('Cancel'),
+              child: const Text('Cancel', style: TextStyle(color: AppColors.textMutedLight)),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
               onPressed: () async {
                 final newUrl = urlController.text.trim();
                 final messenger = ScaffoldMessenger.of(context);
@@ -217,16 +233,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final brandingState = ref.watch(instituteBrandingProvider);
     final isLoading = authState.status == AuthStatus.loading;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
+        elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.school_outlined, color: AppColors.primary),
+            tooltip: 'Enter Institute Code',
+            onPressed: () => InstituteCodeDialog.show(context),
+          ),
           if (kDebugMode)
             IconButton(
-              icon: const Icon(Icons.settings_outlined),
+              icon: const Icon(Icons.settings_outlined, color: AppColors.textMutedLight),
               tooltip: 'Server Settings (Debug Only)',
               onPressed: _showServerConfigModal,
             ),
@@ -235,17 +259,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Logo & Heading
+                  // Logo Emblem with Secret 5-tap for QA settings
                   Center(
                     child: GestureDetector(
                       onTap: () {
-                        // Secret 5-tap developer backdoor for QA/testing without exposing UI to clients
                         _logoTapCount++;
                         if (_logoTapCount >= 5) {
                           _logoTapCount = 0;
@@ -253,52 +276,141 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         }
                       },
                       child: Container(
-                        width: 64,
-                        height: 64,
+                        width: 68,
+                        height: 68,
                         decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withOpacity(0.3),
-                            blurRadius: 16,
-                            offset: const Offset(0, 8),
+                          gradient: const LinearGradient(
+                            colors: [AppColors.accent, AppColors.primary],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                        ],
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'C',
-                          style: TextStyle(
-                            fontSize: 34,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.35),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'C',
+                            style: TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: -1,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                  ),
                   const SizedBox(height: 20),
+
+                  // Brand Heading
                   Text(
-                    'Welcome to Classora',
+                    'Classora 2.0',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
                       color: isDark ? AppColors.textDark : AppColors.textLight,
+                      letterSpacing: -0.5,
                     ),
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Sign in to access your institute portal',
+                    'Sign in to access your institute live classroom & study portal',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 13,
                       color: AppColors.textMutedLight,
+                      height: 1.3,
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 18),
+
+                  // Institute White-Label Card on Login Screen
+                  GestureDetector(
+                    onTap: () => InstituteCodeDialog.show(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.slate800 : Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: brandingState.branding.brandColor.withValues(alpha: 0.35),
+                          width: 1.2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.03),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: brandingState.branding.brandColor,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                brandingState.branding.initials,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  brandingState.branding.name,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark ? AppColors.textDark : AppColors.textLight,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 1),
+                                Text(
+                                  'Institute Code: ${brandingState.branding.effectiveCode} • Tap to change',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: AppColors.textMutedLight,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: brandingState.branding.brandColor.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.vpn_key_outlined, size: 14, color: brandingState.branding.brandColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
 
                   // Error Banner
                   if (authState.status == AuthStatus.error && authState.errorMessage != null)
@@ -308,7 +420,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.liveRedLight,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.liveRed.withOpacity(0.3)),
+                        border: Border.all(color: AppColors.liveRed.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         children: [
@@ -328,88 +440,173 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
 
-                  // Form
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(
-                            labelText: 'Email Address',
-                            prefixIcon: Icon(Icons.mail_outline),
+                  // Main Form Card (Light-first Card with radius 12, soft shadow)
+                  Container(
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                      ),
+                      boxShadow: [
+                        if (!isDark)
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
                           ),
-                          validator: (val) {
-                            if (val == null || val.trim().isEmpty) return 'Email is required';
-                            if (!val.contains('@')) return 'Enter a valid email';
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          decoration: InputDecoration(
-                            labelText: 'Password',
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                setState(() => _obscurePassword = !_obscurePassword);
-                              },
+                      ],
+                    ),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Account Credentials',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? AppColors.textDark : AppColors.textLight,
                             ),
                           ),
-                          validator: (val) {
-                            if (val == null || val.isEmpty) return 'Password is required';
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 24),
+                          const SizedBox(height: 16),
 
-                        // Login Button
-                        ElevatedButton(
-                          onPressed: isLoading ? null : _submit,
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          // Email field
+                          TextFormField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: InputDecoration(
+                              labelText: 'Email Address',
+                              hintText: 'name@institute.edu',
+                              prefixIcon: const Icon(Icons.mail_outline, size: 20),
+                              filled: true,
+                              fillColor: isDark ? const Color(0xFF0F172A) : AppColors.backgroundLight,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.trim().isEmpty) return 'Email is required';
+                              if (!val.contains('@')) return 'Enter a valid email address';
+                              return null;
+                            },
                           ),
-                          child: isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                )
-                              : const Text('Sign In', style: TextStyle(fontSize: 16)),
-                        ),
-                      ],
+                          const SizedBox(height: 16),
+
+                          // Password field
+                          TextFormField(
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              hintText: 'Enter account password',
+                              prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  setState(() => _obscurePassword = !_obscurePassword);
+                                },
+                              ),
+                              filled: true,
+                              fillColor: isDark ? const Color(0xFF0F172A) : AppColors.backgroundLight,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: isDark ? AppColors.borderDark : AppColors.borderLight),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                              ),
+                            ),
+                            validator: (val) {
+                              if (val == null || val.isEmpty) return 'Password is required';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Sign In CTA Button (min touch target 48 dp per DESIGN.md Section 1)
+                          SizedBox(
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: isLoading ? null : _submit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 1,
+                              ),
+                              child: isLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Sign In',
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
                   const SizedBox(height: 20),
 
-                  // Accept Invite CTA
-                  OutlinedButton.icon(
-                    onPressed: () => context.push('/accept-invite'),
-                    icon: const Icon(Icons.card_giftcard_outlined, size: 18),
-                    label: const Text('Have an invite code? Accept Invite'),
+                  // Accept Invite / Batch Code Outlined Button
+                  SizedBox(
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      onPressed: () => context.push('/accept-invite'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.primary, width: 1.2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.school_outlined, size: 18),
+                      label: const Text(
+                        'Have an Invite or Batch Code? Join Here',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ),
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
 
-                  // Quick Demo Login Pills (show only in debug mode or when DEMO_MODE build flag is on)
+                  // Demo Quick-Fill Accounts (Clean isolated card for QA in debug/demo builds)
                   if (kDebugMode || const bool.fromEnvironment('DEMO_MODE', defaultValue: false))
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: isDark ? AppColors.surfaceDark : AppColors.slate100,
-                        borderRadius: BorderRadius.circular(16),
+                        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: isDark ? AppColors.borderDark : AppColors.borderLight,
                         ),
@@ -417,14 +614,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'DEMO ACCOUNTS (PASSWORD: Password@123)',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5,
-                              color: AppColors.textMutedLight,
-                            ),
+                          const Row(
+                            children: [
+                              Icon(Icons.developer_mode, size: 14, color: AppColors.accent),
+                              SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'QUICK LOGIN (DEBUG & QA TEST ONLY)',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                    color: AppColors.textMutedLight,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 12),
                           Wrap(
@@ -432,18 +638,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             runSpacing: 8,
                             children: [
                               ActionChip(
-                                label: const Text('Admin'),
-                                avatar: const Icon(Icons.admin_panel_settings, size: 16),
+                                label: const Text('Admin', style: TextStyle(fontSize: 12)),
+                                avatar: const Icon(Icons.admin_panel_settings, size: 14, color: AppColors.primary),
+                                backgroundColor: isDark ? const Color(0xFF0F172A) : AppColors.backgroundLight,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 onPressed: () => _quickFill('admin@apex.edu', 'Password@123'),
                               ),
                               ActionChip(
-                                label: const Text('Teacher 1'),
-                                avatar: const Icon(Icons.school, size: 16),
+                                label: const Text('Teacher 1', style: TextStyle(fontSize: 12)),
+                                avatar: const Icon(Icons.school, size: 14, color: AppColors.accent),
+                                backgroundColor: isDark ? const Color(0xFF0F172A) : AppColors.backgroundLight,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 onPressed: () => _quickFill('teacher1@apex.edu', 'Password@123'),
                               ),
                               ActionChip(
-                                label: const Text('Student 1'),
-                                avatar: const Icon(Icons.person, size: 16),
+                                label: const Text('Student 1', style: TextStyle(fontSize: 12)),
+                                avatar: const Icon(Icons.person, size: 14, color: AppColors.success),
+                                backgroundColor: isDark ? const Color(0xFF0F172A) : AppColors.backgroundLight,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 onPressed: () => _quickFill('student1@apex.edu', 'Password@123'),
                               ),
                             ],

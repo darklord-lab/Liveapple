@@ -15,6 +15,11 @@ import '../../features/learning/presentation/screens/assignments_screen.dart';
 import '../../features/learning/presentation/screens/cbt_tests_screen.dart';
 import '../../features/learning/presentation/screens/fees_screen.dart';
 import '../../features/learning/presentation/screens/attendance_screen.dart';
+import '../../features/auth/presentation/edit_profile_screen.dart';
+import '../../features/help/presentation/help_walkthrough_screen.dart';
+import '../../features/institute/presentation/manage_institute_content_screen.dart';
+import '../../features/learning/presentation/screens/test_result_screen.dart';
+import '../../features/store/presentation/screens/course_store_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateProvider);
@@ -70,6 +75,34 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/attendance',
         builder: (context, state) => const AttendanceScreen(),
       ),
+      GoRoute(
+        path: '/edit-profile',
+        builder: (context, state) => EditProfileScreen(user: authState.user!),
+      ),
+      GoRoute(
+        path: '/help',
+        builder: (context, state) => HelpWalkthroughScreen(
+          initialRole: state.uri.queryParameters['role'] ?? authState.user?.role ?? 'STUDENT',
+          user: authState.user,
+          openTourImmediately: state.uri.queryParameters['tour'] == 'true',
+        ),
+      ),
+      GoRoute(
+        path: '/institute-content',
+        builder: (context, state) => const ManageInstituteContentScreen(),
+      ),
+      GoRoute(
+        path: '/test-result',
+        builder: (context, state) {
+          final attemptId = state.uri.queryParameters['attemptId'] ?? '';
+          final code = state.uri.queryParameters['code'];
+          return TestResultScreen(attemptId: attemptId, code: code);
+        },
+      ),
+      GoRoute(
+        path: '/store',
+        builder: (context, state) => const CourseStoreScreen(),
+      ),
     ],
     redirect: (BuildContext context, GoRouterState state) {
       final status = authState.status;
@@ -80,9 +113,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         return location == '/splash' ? null : '/splash';
       }
 
-      // 2. Unauthenticated -> Go to login or accept-invite
+      // 2. Unauthenticated -> Go to login, accept-invite, or test-result
       if (status == AuthStatus.unauthenticated || status == AuthStatus.error) {
-        if (location == '/login' || location == '/accept-invite') {
+        if (location == '/login' || location == '/accept-invite' || location == '/test-result') {
           return null;
         }
         return '/login';

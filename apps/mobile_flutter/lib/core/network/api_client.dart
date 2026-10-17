@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../storage/secure_storage.dart';
 import '../errors/app_exception.dart';
 import 'endpoints.dart';
+
+final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
 class ApiClient {
   final Dio dio;

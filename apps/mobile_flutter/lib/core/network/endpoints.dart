@@ -27,6 +27,8 @@ class Endpoints {
   static const String logout = '/v1/auth/logout';
   static const String acceptInvite = '/v1/auth/accept-invite';
   static const String me = '/v1/auth/me';
+  static const String updateProfile = '/v1/auth/profile';
+  static const String uploadAvatar = '/v1/auth/avatar';
 
   // Invites
   static const String validateInvite = '/v1/invites/validate';
@@ -64,6 +66,37 @@ class Endpoints {
   static const String feePay = '/v1/fees/pay';
   static const String feeDues = '/v1/fees/my-dues';
   static const String feeReports = '/v1/fees/reports';
+
+  // Phase 4.1 Study Material & Folders
+  static String batchFolders(String batchId) => '/v1/batches/$batchId/folders';
+  static String batchMaterials(String batchId) => '/v1/batches/$batchId/materials';
+  static String downloadMaterial(String materialId) => '/v1/materials/$materialId/download';
+  static String deleteMaterial(String materialId) => '/v1/materials/$materialId';
+  static String deleteFolder(String folderId) => '/v1/materials/folders/$folderId';
+
+  // Phase 4.4 Institute Links & Testimonials
+  static const String instituteLinks = '/v1/institute/links';
+  static String instituteLink(String id) => '/v1/institute/links/$id';
+  static const String instituteTestimonials = '/v1/institute/testimonials';
+  static String instituteTestimonial(String id) => '/v1/institute/testimonials/$id';
+
+  // Phase 4.5 Institute Code & White-Label Branding
+  static String instituteLookup(String code) => '/v1/institute/lookup/$code';
+  static const String instituteBranding = '/v1/institute/branding';
+
+  // Phase 4.6 Share Score & Deep Link
+  static String testShare(String attemptId) => '/v1/tests/share/$attemptId';
+
+  // Phase 6 Course Store (P2)
+  static const String storeOfferings = '/v1/store/offerings';
+  static String storeOffering(String id) => '/v1/store/offerings/$id';
+  static const String storeCoupons = '/v1/store/coupons';
+  static const String storeValidateCoupon = '/v1/store/coupons/validate';
+  static const String storeCheckout = '/v1/store/checkout';
+  static const String storeVerifyPayment = '/v1/store/verify-payment';
+  static const String storePurchases = '/v1/store/purchases';
+  static String storeInvoice(String purchaseId) => '/v1/store/purchases/$purchaseId/invoice';
+  static String storeRefund(String purchaseId) => '/v1/store/purchases/$purchaseId/refund';
 
   // Health
   static const String health = '/health';

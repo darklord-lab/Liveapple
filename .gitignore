@@ -10,6 +10,8 @@ node_modules/
 
 # Build Outputs
 dist/
+!apps/api/admin-dist/**
+!_archive/admin/dist/**
 build/
 .dart_tool/
 .flutter-plugins
@@ -53,4 +55,6 @@ yarn-error.log*
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+# Uploads
+uploads/
+apps/api/uploads/
