@@ -6,23 +6,29 @@ const prisma = new PrismaClient();
 async function resetDemo() {
   // 3.1 Guard against running in production
   if (process.env.NODE_ENV === 'production') {
-    if (process.env.ALLOW_DESTRUCTIVE_DEMO_RESET !== 'true') {
-      console.error('❌ Refusing to run db:reset-demo in production environment! Set ALLOW_DESTRUCTIVE_DEMO_RESET=true to override.');
-      process.exit(1);
-    }
-    // Never touch a DB that has real non-demo records
-    const nonDemoUserCount = await prisma.user.count({
-      where: {
-        email: { not: { endsWith: '@apex.edu' } },
-      },
-    });
-    if (nonDemoUserCount > 0) {
-      console.error(`❌ Refusing to reset DB in production: Found ${nonDemoUserCount} real non-demo users!`);
-      process.exit(1);
-    }
-    if (process.env.ALLOW_DEMO_USERS !== 'true') {
-      console.log('ℹ️ ALLOW_DEMO_USERS is false in production: Skipping demo user creation.');
-      return;
+    const isOverrideAllowed =
+      process.env.ALLOW_DESTRUCTIVE_DEMO_RESET === 'true' ||
+      process.env.FORCE_DEMO_RESET === 'true';
+
+    if (!isOverrideAllowed) {
+      const instituteCount = await prisma.institute.count().catch(() => 0);
+      if (instituteCount > 0) {
+        console.log('ℹ️ Production environment detected: Database already contains data. Skipping demo reset to protect data.');
+        return;
+      }
+      console.log('🌱 Production initial deploy: Database is empty. Seeding baseline demo data...');
+    } else {
+      // If override is enabled, verify there are no real customer users
+      const nonDemoUserCount = await prisma.user.count({
+        where: {
+          email: { not: { endsWith: '@apex.edu' } },
+        },
+      }).catch(() => 0);
+
+      if (nonDemoUserCount > 0) {
+        console.log(`ℹ️ Refusing to reset DB in production: Found ${nonDemoUserCount} real non-demo users. Skipping demo reset safely.`);
+        return;
+      }
     }
   }
 
