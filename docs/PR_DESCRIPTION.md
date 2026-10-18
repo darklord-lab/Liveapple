@@ -9,9 +9,6 @@ This pull request delivers complete live classroom reliability, production safet
 - **Web App Serving & CSP Security:** The Flutter Web client is packaged at `/app/` with route-scoped Helmet CSP allowing API and LiveKit WebSocket connections (`wss:`), no-cache headers for instant updates, and desktop layout (>=900px) with dedicated stage and sidebar tabs.
 - **Coursework Separation:** Distinct separation between Study Material (folders/files, no marks or due dates) and Assignments (due dates, marks, grading).
 - **Duplicate Class & Demo Guard:** Safe idempotent scheduling migrations prevent duplicate class slots, and production demo safeguards prevent accidental data wiping.
-- **Real PDF Slides Presentation (Bug 1 Fix):** Replaced dummy/sample mock slide fallbacks with real PDF file upload, server hash/page count calculation, real-time student sync, and direct batch study material PDF selection.
-- **Android Screen Share Lifecycle (Bug 2 Fix):** Implemented Android 14+ `mediaProjection` foreground service (`MediaProjectionService.kt`), host-only validation, error messaging, student hero view containment, and safe flag gating.
-- **Release Verification:** Verified with 174 backend tests, 99 Flutter tests, and zero flutter analyze issues.
 
 ---
 

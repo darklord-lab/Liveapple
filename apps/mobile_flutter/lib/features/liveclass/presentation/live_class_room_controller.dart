@@ -5,13 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:livekit_client/livekit_client.dart' as lk;
-import 'package:dio/dio.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import '../data/live_class_repository.dart';
 import '../domain/live_class_model.dart';
 import '../domain/class_participant.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../../../core/network/endpoints.dart';
-import '../../../core/network/api_client.dart';
 import '../../../core/errors/app_exception.dart';
 import 'live_class_controller.dart';
 
@@ -102,11 +101,6 @@ class LiveClassRoomState {
   final bool isDocPresenting;
   final String docTitle;
   final int docPage;
-  final int docTotalPages;
-  final String? docUrl;
-  final String? docDeckId;
-  final String? docFileHash;
-  final String? docError;
   final String? activeSpeakerName;
   final List<ClassParticipant> participants;
   final List<ChatMessageItem> chatMessages;
@@ -149,11 +143,6 @@ class LiveClassRoomState {
     this.isDocPresenting = false,
     this.docTitle = '',
     this.docPage = 1,
-    this.docTotalPages = 1,
-    this.docUrl,
-    this.docDeckId,
-    this.docFileHash,
-    this.docError,
     this.activeSpeakerName,
     this.participants = const [],
     this.chatMessages = const [],
@@ -197,11 +186,6 @@ class LiveClassRoomState {
     bool? isDocPresenting,
     String? docTitle,
     int? docPage,
-    int? docTotalPages,
-    String? docUrl,
-    String? docDeckId,
-    String? docFileHash,
-    String? docError,
     String? activeSpeakerName,
     List<ClassParticipant>? participants,
     List<ChatMessageItem>? chatMessages,
@@ -247,11 +231,6 @@ class LiveClassRoomState {
       isDocPresenting: isDocPresenting ?? this.isDocPresenting,
       docTitle: docTitle ?? this.docTitle,
       docPage: docPage ?? this.docPage,
-      docTotalPages: docTotalPages ?? this.docTotalPages,
-      docUrl: docUrl ?? this.docUrl,
-      docDeckId: docDeckId ?? this.docDeckId,
-      docFileHash: docFileHash ?? this.docFileHash,
-      docError: docError ?? this.docError,
       activeSpeakerName: activeSpeakerName ?? this.activeSpeakerName,
       participants: participants ?? this.participants,
       chatMessages: chatMessages ?? this.chatMessages,
@@ -296,6 +275,9 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
   final StreamController<void> _clearStreamController =
       StreamController<void>.broadcast();
 
+  static const _screenshareChannel = MethodChannel('com.classora.app/screenshare');
+  Completer<bool>? _screenshareServiceReadyCompleter;
+
   Stream<Map<String, dynamic>> get remoteDrawStream => _drawStreamController.stream;
   Stream<void> get remoteClearStream => _clearStreamController.stream;
 
@@ -304,7 +286,26 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
     SecureStorageService? storage,
   })  : _repository = repository ?? LiveClassRepository(),
         _storage = storage ?? SecureStorageService(),
-        super(LiveClassRoomState());
+        super(LiveClassRoomState()) {
+    _initScreenshareChannel();
+  }
+
+  void _initScreenshareChannel() {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      _screenshareChannel.setMethodCallHandler((call) async {
+        if (call.method == 'onServiceReady') {
+          if (_screenshareServiceReadyCompleter != null && !_screenshareServiceReadyCompleter!.isCompleted) {
+            _screenshareServiceReadyCompleter!.complete(true);
+          }
+        } else if (call.method == 'onServiceError') {
+          final err = call.arguments?.toString() ?? 'Service error';
+          if (_screenshareServiceReadyCompleter != null && !_screenshareServiceReadyCompleter!.isCompleted) {
+            _screenshareServiceReadyCompleter!.completeError(Exception(err));
+          }
+        }
+      });
+    }
+  }
 
   Future<void> joinRoom(
     String classId, {
@@ -619,10 +620,6 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
             isDocPresenting: docData != null && docData['isOpen'] == true,
             docTitle: docData?['title']?.toString() ?? '',
             docPage: (docData?['page'] as num?)?.toInt() ?? 1,
-            docTotalPages: (docData?['totalPages'] as num?)?.toInt() ?? 1,
-            docUrl: docData?['url']?.toString(),
-            docDeckId: docData?['deckId']?.toString(),
-            docFileHash: docData?['fileHash']?.toString(),
             lastStageEventReceived: 'mode: $st (snapshot) at ${DateTime.now().toIso8601String()}',
           );
         }
@@ -731,28 +728,12 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
         if (data is Map) {
           final isOpen = data['isOpen'] as bool? ?? false;
           final title = data['title'] as String? ?? '';
-          final page = (data['page'] as num?)?.toInt() ?? 1;
-          final totalPages = (data['totalPages'] as num?)?.toInt() ?? 1;
-          final url = data['url']?.toString();
-          final deckId = data['deckId']?.toString();
-          final fileHash = data['fileHash']?.toString();
+          final page = data['page'] as int? ?? 1;
           state = state.copyWith(
             isDocPresenting: isOpen,
             docTitle: title,
             docPage: page,
-            docTotalPages: totalPages,
-            docUrl: url,
-            docDeckId: deckId,
-            docFileHash: fileHash,
-            stage: isOpen ? 'SLIDES' : (state.stage == 'SLIDES' ? 'VIDEO' : state.stage),
           );
-        }
-      });
-
-      _socket?.on('doc:page', (data) {
-        if (data is Map) {
-          final page = (data['page'] as num?)?.toInt() ?? 1;
-          state = state.copyWith(docPage: page);
         }
       });
 
@@ -1190,46 +1171,74 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
   }
 
   Future<void> toggleScreenShare({void Function(String message)? onError}) async {
-    if (!state.isHost) {
-      onError?.call('Sirf teacher screen share shuru kar sakte hain');
-      return;
-    }
-    const platformChannel = MethodChannel('com.classora.app/screenshare');
     final next = !state.isScreenSharing;
     try {
-      if (_liveKitRoom?.connectionState == lk.ConnectionState.connected) {
-        if (next && !kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-          try {
-            await platformChannel.invokeMethod('startForeground');
-          } catch (e) {
-            debugPrint('[SCREEN_SHARE] Foreground service start note: $e');
-          }
-        }
-        await _liveKitRoom?.localParticipant?.setScreenShareEnabled(next);
-        final nextStage = next ? 'SCREEN' : 'VIDEO';
-        setStage(nextStage);
-        state = state.copyWith(isScreenSharing: next, stage: nextStage);
-        if (!next && !kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-          try {
-            await platformChannel.invokeMethod('stopForeground');
-          } catch (e) {
-            debugPrint('[SCREEN_SHARE] Foreground service stop note: $e');
-          }
-        }
-      } else {
+      if (_liveKitRoom?.connectionState != lk.ConnectionState.connected) {
         throw Exception('LiveKit is not connected');
+      }
+
+      if (next) {
+        // Turning ON Screen Share
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+          // (a) On Android 13+ request POST_NOTIFICATIONS
+          try {
+            await _screenshareChannel.invokeMethod('requestNotificationPermission');
+          } catch (e) {
+            debugPrint('[SCREEN_SHARE] Notification permission request error: $e');
+          }
+
+          // (b) MediaProjection consent first - exactly ONE dialog (stores token in flutter_webrtc)
+          final hasConsent = await rtc.Helper.requestCapturePermission(fullScreenOnly: true);
+          if (!hasConsent) {
+            debugPrint('[SCREEN_SHARE] User declined MediaProjection consent dialog');
+            return;
+          }
+
+          // (c) Only after consent returns OK, start the MediaProjection foreground service
+          _screenshareServiceReadyCompleter = Completer<bool>();
+          await _screenshareChannel.invokeMethod('startService');
+
+          // (d) Dart WAITS for "ready" acknowledgement with timeout (5s)
+          try {
+            await _screenshareServiceReadyCompleter!.future.timeout(const Duration(seconds: 5));
+          } catch (e) {
+            debugPrint('[SCREEN_SHARE] Service ready acknowledgement timeout or error: $e');
+            try { await _screenshareChannel.invokeMethod('stopService'); } catch (_) {}
+            throw Exception('Screen share foreground service initialization failed');
+          }
+        }
+
+        // Enable screen share track in LiveKit (reuses stored mediaProjectionData)
+        await _liveKitRoom?.localParticipant?.setScreenShareEnabled(true);
+        const nextStage = 'SCREEN';
+        setStage(nextStage);
+        state = state.copyWith(isScreenSharing: true, stage: nextStage);
+      } else {
+        // Turning OFF Screen Share
+        await _liveKitRoom?.localParticipant?.setScreenShareEnabled(false);
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+          try {
+            await _screenshareChannel.invokeMethod('stopService');
+          } catch (e) {
+            debugPrint('[SCREEN_SHARE] stopService error: $e');
+          }
+        }
+        const nextStage = 'VIDEO';
+        setStage(nextStage);
+        state = state.copyWith(isScreenSharing: false, stage: nextStage);
       }
     } catch (e) {
       debugPrint('[SCREEN_SHARE] Toggle error: $e');
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
         try {
-          await platformChannel.invokeMethod('stopForeground');
+          await _screenshareChannel.invokeMethod('stopService');
         } catch (_) {}
       }
       if (onError != null) {
         onError('Screen share shuru nahi ho paya');
       }
-      state = state.copyWith(isScreenSharing: false);
+      setStage('VIDEO');
+      state = state.copyWith(isScreenSharing: false, stage: 'VIDEO');
     }
   }
 
@@ -1271,144 +1280,15 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
     }
   }
 
-  void setDocPresentation({
-    required bool isOpen,
-    String title = '',
-    int page = 1,
-    int totalPages = 1,
-    String? url,
-    String? deckId,
-    String? fileHash,
-    String? errorMessage,
-  }) {
-    final nextStage = isOpen ? 'SLIDES' : (state.stage == 'SLIDES' ? 'VIDEO' : state.stage);
-    state = state.copyWith(
-      isDocPresenting: isOpen,
-      docTitle: title,
-      docPage: page,
-      docTotalPages: totalPages,
-      docUrl: url,
-      docDeckId: deckId,
-      docFileHash: fileHash,
-      docError: errorMessage,
-      stage: nextStage,
-    );
+  void setDocPresentation({required bool isOpen, String title = '', int page = 1}) {
+    state = state.copyWith(isDocPresenting: isOpen, docTitle: title, docPage: page);
     if (_currentClassId != null && state.isHost) {
       _socket?.emit('doc:present', {
         'classId': _currentClassId,
         'isOpen': isOpen,
         'title': title,
         'page': page,
-        'totalPages': totalPages,
-        'url': url,
-        'deckId': deckId,
-        'fileHash': fileHash,
       });
-      _socket?.emit('stage:set', {
-        'classId': _currentClassId,
-        'stage': nextStage,
-        'mode': nextStage,
-      });
-    }
-  }
-
-  void setDocPage(int page) {
-    if (_currentClassId != null && state.isHost) {
-      state = state.copyWith(docPage: page);
-      _socket?.emit('doc:page', {
-        'classId': _currentClassId,
-        'page': page,
-      });
-    }
-  }
-
-  Future<bool> uploadAndPresentSlides({
-    required String fileName,
-    Uint8List? fileBytes,
-    String? filePath,
-    int? fileSize,
-    void Function(double progress)? onProgress,
-    void Function(String message)? onError,
-  }) async {
-    if (_currentClassId == null) {
-      onError?.call('Class session active nahi hai');
-      return false;
-    }
-    final nameLower = fileName.toLowerCase();
-    if (!nameLower.endsWith('.pdf')) {
-      onError?.call('Only PDF slides are allowed. PPT ko PDF me export karo ya screen share karo');
-      return false;
-    }
-    final size = fileSize ?? fileBytes?.length ?? 0;
-    if (size > 50 * 1024 * 1024) {
-      onError?.call('PDF file ka size 50MB se chhota hona chahiye');
-      return false;
-    }
-
-    try {
-      MultipartFile multipartFile;
-      if (kIsWeb) {
-        if (fileBytes == null || fileBytes.isEmpty) {
-          onError?.call('PDF data empty hai. Kripya dobara chunein.');
-          return false;
-        }
-        multipartFile = MultipartFile.fromBytes(
-          fileBytes,
-          filename: fileName,
-        );
-      } else {
-        if (filePath != null && filePath.isNotEmpty) {
-          multipartFile = await MultipartFile.fromFile(
-            filePath,
-            filename: fileName,
-          );
-        } else if (fileBytes != null && fileBytes.isNotEmpty) {
-          multipartFile = MultipartFile.fromBytes(
-            fileBytes,
-            filename: fileName,
-          );
-        } else {
-          onError?.call('File path nahi mila');
-          return false;
-        }
-      }
-
-      final formData = FormData.fromMap({'file': multipartFile});
-      final res = await ApiClient().dio.post(
-        '${Endpoints.classes}/$_currentClassId/slides',
-        data: formData,
-        onSendProgress: (sent, total) {
-          if (total > 0 && onProgress != null) {
-            onProgress(sent / total);
-          }
-        },
-      );
-
-      if (res.statusCode == 200 || res.statusCode == 201) {
-        final data = res.data;
-        final deckId = data['deckId']?.toString() ?? data['data']?['deckId']?.toString() ?? '';
-        final fileHash = data['fileHash']?.toString() ?? data['data']?['fileHash']?.toString() ?? '';
-        final pageCount = (data['pageCount'] as num?)?.toInt() ?? (data['data']?['pageCount'] as num?)?.toInt() ?? 1;
-        final url = data['streamUrl']?.toString() ?? data['data']?['url']?.toString() ?? '';
-
-        setDocPresentation(
-          isOpen: true,
-          title: fileName,
-          page: 1,
-          totalPages: pageCount,
-          url: url,
-          deckId: deckId,
-          fileHash: fileHash,
-        );
-        return true;
-      } else {
-        onError?.call('Slides upload failed. Status: ${res.statusCode}');
-        return false;
-      }
-    } catch (e) {
-      debugPrint('[SLIDES_UPLOAD] Error: $e');
-      onError?.call('Slides upload nahi ho payi: ${e.toString()}');
-      return false;
     }
   }
 
@@ -1552,6 +1432,12 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
       state.localVideoTrack?.stop();
       state.localAudioTrack?.stop();
     } catch (_) {}
+
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        _screenshareChannel.invokeMethod('stopService');
+      } catch (_) {}
+    }
 
     if (_currentClassId != null) {
       _socket?.emit('class:leave', {'classId': _currentClassId});

@@ -4,7 +4,8 @@
 -keep class io.flutter.util.**  { *; }
 -keep class io.flutter.view.**  { *; }
 -keep class io.flutter.**  { *; }
--keep class io.flutter.plugins.**  { *; }
+# App Rules
+-keep class com.classora.classora_mobile.** { *; }
 
 # LiveKit & WebRTC Keep Rules
 -keep class io.livekit.plugin.** { *; }
@@ -12,7 +13,6 @@
 -keep class livekit.org.webrtc.** { *; }
 -keep class org.webrtc.** { *; }
 -keep class com.cloudwebrtc.webrtc.** { *; }
--keep class com.classora.classora_mobile.MediaProjectionService { *; }
 
 # Prevent native JNI methods from being renamed/stripped
 -keepclasseswithmembernames class * {

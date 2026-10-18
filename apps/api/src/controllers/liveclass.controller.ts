@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import crypto from 'crypto';
 import { LiveClassService } from '../services/liveclass.service.js';
 import { AppError } from '../errors/AppError.js';
 import { getStorageService } from '../services/storage.service.js';
@@ -282,22 +281,12 @@ export class LiveClassController {
         size: file.size,
       });
 
-      const fileHash = crypto.createHash('sha256').update(file.buffer).digest('hex');
-      const pageMatches = file.buffer.toString('binary').match(/\/Type\s*\/Page\b/g);
-      const pageCount = (pageMatches && pageMatches.length > 0) ? pageMatches.length : 1;
-
       res.status(201).json({
         success: true,
-        deckId: storageResult.key,
         fileKey: storageResult.key,
-        fileHash,
-        pageCount,
         streamUrl: `/api/v1/classes/${classId}/slides/${storageResult.key}`,
         data: {
-          deckId: storageResult.key,
           fileKey: storageResult.key,
-          fileHash,
-          pageCount,
           url: `/api/v1/classes/${classId}/slides/${storageResult.key}`,
           fileName: file.originalname,
           fileSize: file.size,

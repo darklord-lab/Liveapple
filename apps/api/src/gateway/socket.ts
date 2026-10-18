@@ -40,8 +40,6 @@ const roomStages = new Map<string, 'VIDEO' | 'SCREEN' | 'BOARD' | 'SLIDES'>();
 const roomBoardStrokes = new Map<string, any[]>();
 export interface RoomDocState {
   isOpen: boolean;
-  deckId?: string;
-  fileHash?: string;
   title?: string;
   url?: string;
   page?: number;
@@ -259,7 +257,7 @@ export function setupSocketGateway(io: Server) {
     });
 
     // Host presents PPT/PDF document slides to all students
-    socket.on('doc:present', (data: { classId: string; isOpen: boolean; title?: string; url?: string; deckId?: string; fileHash?: string; page?: number; totalPages?: number; zoom?: number }) => {
+    socket.on('doc:present', (data: { classId: string; isOpen: boolean; title?: string; url?: string; page?: number; totalPages?: number; zoom?: number }) => {
       if (!isHost) return;
       const existing = roomDocStates.get(data.classId) || { isOpen: false };
       const updatedState: RoomDocState = {
