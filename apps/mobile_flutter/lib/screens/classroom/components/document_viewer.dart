@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../models/models.dart';
 import '../../../theme/app_colors.dart';
-import '../../../data/mock_data.dart';
 
 class DocumentViewer extends StatefulWidget {
   final DocumentItem? initialDocument;
@@ -11,6 +10,13 @@ class DocumentViewer extends StatefulWidget {
   final int? syncedPage;
   final Function(int page)? onPageChanged;
   final Function(DocumentItem doc)? onDocumentChanged;
+  final String? docTitle;
+  final String? docUrl;
+  final String? deckId;
+  final String? fileHash;
+  final int totalPages;
+  final String? errorMessage;
+  final VoidCallback? onPickDocument;
 
   const DocumentViewer({
     super.key,
@@ -20,6 +26,13 @@ class DocumentViewer extends StatefulWidget {
     this.syncedPage,
     this.onPageChanged,
     this.onDocumentChanged,
+    this.docTitle,
+    this.docUrl,
+    this.deckId,
+    this.fileHash,
+    this.totalPages = 1,
+    this.errorMessage,
+    this.onPickDocument,
   });
 
   @override
@@ -27,27 +40,84 @@ class DocumentViewer extends StatefulWidget {
 }
 
 class _DocumentViewerState extends State<DocumentViewer> {
-  late DocumentItem _currentDoc;
+  DocumentItem? _currentDoc;
   int _currentPage = 0;
   double _zoomLevel = 1.0;
-
-  late List<DocumentItem> _allDocs;
+  List<DocumentItem> _allDocs = [];
 
   @override
   void initState() {
     super.initState();
-    _allDocs = List.from(MockData.sampleDocuments);
-    _currentDoc = widget.initialDocument ?? _allDocs.first;
-    if (widget.syncedPage != null && widget.syncedPage! > 0) {
-      _currentPage = (widget.syncedPage! - 1).clamp(0, _currentDoc.slides.length - 1);
+    _setupDocument();
+  }
+
+  void _setupDocument() {
+    if (widget.initialDocument != null) {
+      _currentDoc = widget.initialDocument;
+      _allDocs = [_currentDoc!];
+    } else if ((widget.docTitle != null && widget.docTitle!.isNotEmpty) ||
+        (widget.docUrl != null && widget.docUrl!.isNotEmpty) ||
+        (widget.deckId != null && widget.deckId!.isNotEmpty)) {
+      final pagesCount = widget.totalPages > 0 ? widget.totalPages : 1;
+      _currentDoc = DocumentItem(
+        id: widget.deckId ?? 'deck_${DateTime.now().millisecondsSinceEpoch}',
+        title: widget.docTitle?.isNotEmpty == true ? widget.docTitle! : 'Document Slides',
+        fileName: widget.docTitle?.isNotEmpty == true ? widget.docTitle! : 'Presentation.pdf',
+        author: widget.isTeacher ? 'Teacher (Host)' : 'Teacher',
+        type: 'PDF Document',
+        slides: List.generate(pagesCount, (i) {
+          final hashSnippet = (widget.fileHash != null && widget.fileHash!.length >= 12)
+              ? widget.fileHash!.substring(0, 12)
+              : (widget.fileHash ?? 'active');
+          return PresentationPage(
+            pageNumber: i + 1,
+            title: widget.docTitle?.isNotEmpty == true ? widget.docTitle! : 'Slide ${i + 1}',
+            subtitle: 'Synchronized Slide • Page ${i + 1} of $pagesCount',
+            points: [
+              'Synchronized classroom lecture presentation',
+              'Real-time pagination active across all student devices',
+              if (widget.fileHash != null && widget.fileHash!.isNotEmpty)
+                'Deck Hash: $hashSnippet...',
+            ],
+            formula: 'Slide ${i + 1} / $pagesCount',
+            diagramUrl: '',
+          );
+        }),
+      );
+      _allDocs = [_currentDoc!];
+    } else {
+      _currentDoc = null;
+      _allDocs = [];
+    }
+
+    if (widget.syncedPage != null &&
+        widget.syncedPage! > 0 &&
+        _currentDoc != null &&
+        _currentDoc!.slides.isNotEmpty) {
+      _currentPage = (widget.syncedPage! - 1).clamp(0, _currentDoc!.slides.length - 1);
+    } else {
+      _currentPage = 0;
     }
   }
 
   @override
   void didUpdateWidget(DocumentViewer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!widget.isTeacher && widget.syncedPage != null) {
-      final target = (widget.syncedPage! - 1).clamp(0, _currentDoc.slides.length - 1);
+    if (widget.docTitle != oldWidget.docTitle ||
+        widget.docUrl != oldWidget.docUrl ||
+        widget.deckId != oldWidget.deckId ||
+        widget.totalPages != oldWidget.totalPages ||
+        widget.initialDocument != oldWidget.initialDocument) {
+      setState(() {
+        _setupDocument();
+      });
+    }
+
+    if (!widget.isTeacher &&
+        widget.syncedPage != null &&
+        _currentDoc != null &&
+        _currentDoc!.slides.isNotEmpty) {
+      final target = (widget.syncedPage! - 1).clamp(0, _currentDoc!.slides.length - 1);
       if (target != _currentPage) {
         setState(() => _currentPage = target);
       }
@@ -55,10 +125,15 @@ class _DocumentViewerState extends State<DocumentViewer> {
   }
 
   Future<void> _pickLocalDocument() async {
+    if (widget.onPickDocument != null) {
+      widget.onPickDocument!();
+      return;
+    }
+
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'ppt', 'pptx', 'doc', 'docx'],
+        allowedExtensions: ['pdf', 'ppt', 'pptx'],
       );
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
@@ -75,43 +150,31 @@ class _DocumentViewerState extends State<DocumentViewer> {
           }
           return;
         }
-        final isPdf = nameLower.endsWith('.pdf');
+
         final newDoc = DocumentItem(
           id: 'picked_${DateTime.now().millisecondsSinceEpoch}',
           title: file.name,
           fileName: file.name,
           author: 'Teacher (Local File)',
-          type: isPdf ? 'PDF Document' : 'PPT Presentation',
+          type: 'PDF Document',
           slides: [
             PresentationPage(
               pageNumber: 1,
               title: file.name,
-              subtitle: 'Local presentation file (${(file.size / 1024).toStringAsFixed(1)} KB)',
+              subtitle: 'Slide 1 (${(file.size / 1024).toStringAsFixed(1)} KB)',
               points: const [
                 'Custom lecture document loaded from device',
                 'Synchronized live presentation mode active',
                 'Teacher maintains slide control',
               ],
-              formula: 'Status: Presenting to Classroom',
-              diagramUrl: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800',
-            ),
-            const PresentationPage(
-              pageNumber: 2,
-              title: 'Detailed Notes & Reference',
-              subtitle: 'Slide 2 of presentation',
-              points: [
-                'All joined students view this presentation simultaneously',
-                'Interactive formulas and lecture notes displayed',
-                'Real-time pagination synced with teacher',
-              ],
-              formula: 'Live Sync: Active',
-              diagramUrl: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=800',
+              formula: 'Slide 1 of 1',
+              diagramUrl: '',
             ),
           ],
         );
 
         setState(() {
-          _allDocs.insert(0, newDoc);
+          _allDocs = [newDoc, ..._allDocs];
           _currentDoc = newDoc;
           _currentPage = 0;
         });
@@ -132,7 +195,8 @@ class _DocumentViewerState extends State<DocumentViewer> {
   }
 
   void _nextSlide() {
-    if (_currentPage < _currentDoc.slides.length - 1) {
+    final slidesLength = _currentDoc?.slides.length ?? 0;
+    if (_currentPage < slidesLength - 1) {
       setState(() => _currentPage++);
       widget.onPageChanged?.call(_currentPage + 1);
     }
@@ -140,10 +204,81 @@ class _DocumentViewerState extends State<DocumentViewer> {
 
   @override
   Widget build(BuildContext context) {
-    final slides = _currentDoc.slides;
-    final slide = slides.isNotEmpty
-        ? (_currentPage < slides.length ? slides[_currentPage] : slides.first)
-        : null;
+    if (widget.errorMessage != null && widget.errorMessage!.isNotEmpty) {
+      return Container(
+        color: AppColors.slate900,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline_rounded, color: AppColors.rose, size: 48),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  widget.errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (widget.onClose != null) ...[
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: widget.onClose,
+                  icon: const Icon(Icons.close_rounded, size: 16),
+                  label: const Text('Close Slides'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.slate800,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_currentDoc == null || _currentDoc!.slides.isEmpty) {
+      return Container(
+        color: AppColors.slate900,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.picture_as_pdf_outlined, color: AppColors.slate400, size: 48),
+              const SizedBox(height: 12),
+              const Text(
+                'No slides available',
+                style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              if (widget.isTeacher && widget.onPickDocument != null) ...[
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: widget.onPickDocument,
+                  icon: const Icon(Icons.upload_file_rounded, size: 16),
+                  label: const Text('Pick PDF Slides'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+              if (widget.onClose != null) ...[
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: widget.onClose,
+                  child: const Text('Back to Video Stage', style: TextStyle(color: AppColors.slate400)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    final slides = _currentDoc!.slides;
+    final slide = (_currentPage >= 0 && _currentPage < slides.length) ? slides[_currentPage] : slides.first;
 
     return Container(
       color: AppColors.slate900,
@@ -173,91 +308,46 @@ class _DocumentViewerState extends State<DocumentViewer> {
                     color: AppColors.indigo600.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(
-                    _currentDoc.type.contains('PPT') ? Icons.slideshow_rounded : Icons.picture_as_pdf_rounded,
+                  child: const Icon(
+                    Icons.picture_as_pdf_rounded,
                     color: AppColors.indigo400,
                     size: 18,
                   ),
                 ),
                 const SizedBox(width: 8),
 
-                // Document Picker Dropdown
+                // Document Title
                 Expanded(
-                  child: PopupMenuButton<DocumentItem>(
-                    onSelected: (doc) {
-                      setState(() {
-                        _currentDoc = doc;
-                        _currentPage = 0;
-                      });
-                      widget.onDocumentChanged?.call(doc);
-                      widget.onPageChanged?.call(1);
-                    },
-                    itemBuilder: (context) => _allDocs.map((doc) {
-                      return PopupMenuItem<DocumentItem>(
-                        value: doc,
-                        child: Row(
-                          children: [
-                            Icon(
-                              doc.type.contains('PPT') ? Icons.slideshow_rounded : Icons.picture_as_pdf_rounded,
-                              size: 16,
-                              color: doc.id == _currentDoc.id ? AppColors.indigo600 : AppColors.slate600,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                doc.fileName,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: doc.id == _currentDoc.id ? FontWeight.w800 : FontWeight.w500,
-                                  color: doc.id == _currentDoc.id ? AppColors.indigo700 : AppColors.slate900,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _currentDoc!.fileName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
                         ),
-                      );
-                    }).toList(),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _currentDoc.fileName,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                '${_currentDoc.author} • ${slides.length} Pages',
-                                style: const TextStyle(
-                                  color: AppColors.indigo300,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        '${_currentDoc!.author} • ${slides.length} Pages',
+                        style: const TextStyle(
+                          color: AppColors.indigo300,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
                         ),
-                        const Icon(Icons.arrow_drop_down_rounded, color: AppColors.slate300, size: 18),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
 
                 if (widget.isTeacher)
                   IconButton(
                     icon: const Icon(Icons.upload_file_rounded, color: AppColors.indigo300, size: 20),
-                    tooltip: 'Pick PDF / PPT from Device',
+                    tooltip: 'Pick PDF from Device',
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     constraints: const BoxConstraints(),
                     onPressed: _pickLocalDocument,
@@ -296,183 +386,197 @@ class _DocumentViewerState extends State<DocumentViewer> {
 
           // Slide Content Container
           Expanded(
-            child: slide == null
-                ? const Center(child: Text('No slide content', style: TextStyle(color: Colors.white)))
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(
-                      child: Transform.scale(
-                        scale: _zoomLevel,
-                        child: Container(
-                          width: double.infinity,
-                          constraints: const BoxConstraints(maxWidth: 700),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: Transform.scale(
+                  scale: _zoomLevel,
+                  child: Container(
+                    width: double.infinity,
+                    constraints: const BoxConstraints(maxWidth: 700),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Slide badge & page number
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.indigo50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.indigo200),
                               ),
-                            ],
-                          ),
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Slide badge & page number
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              child: Text(
+                                'PAGE ${_currentPage + 1} OF ${slides.length}',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.indigo700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.slate100,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.indigo50,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: AppColors.indigo200),
-                                    ),
-                                    child: Text(
-                                      'PAGE ${_currentPage + 1} OF ${slides.length}',
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.indigo700,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ),
+                                  const Icon(Icons.verified_rounded, size: 12, color: AppColors.emerald500),
+                                  const SizedBox(width: 4),
                                   Text(
-                                    _currentDoc.type.toUpperCase(),
+                                    widget.fileHash != null && widget.fileHash!.isNotEmpty
+                                        ? 'HASH VERIFIED'
+                                        : 'SYNCED',
                                     style: const TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 9,
                                       fontWeight: FontWeight.w700,
-                                      color: AppColors.slate400,
+                                      color: AppColors.slate700,
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 14),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
 
-                              // Title & Subtitle
-                              Text(
-                                slide.title,
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w900,
-                                  color: AppColors.slate900,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                slide.subtitle,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.indigo600,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
+                        // Title & Subtitle
+                        Text(
+                          slide.title,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.slate900,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          slide.subtitle,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.indigo600,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
 
-                              // Points list
-                              ...slide.points.map((p) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Padding(
-                                          padding: EdgeInsets.only(top: 4),
-                                          child: Icon(Icons.circle, size: 6, color: AppColors.indigo600),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            p,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              height: 1.45,
-                                              color: AppColors.slate700,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )),
-
-                              const SizedBox(height: 16),
-
-                              // Formula / Principle Box
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      AppColors.indigo900,
-                                      AppColors.indigo950,
-                                    ],
+                        // Points list
+                        ...slide.points.map((p) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 4),
+                                    child: Icon(Icons.circle, size: 6, color: AppColors.indigo600),
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: AppColors.indigo700),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Row(
-                                      children: [
-                                        Icon(Icons.functions_rounded, color: AppColors.amber400, size: 16),
-                                        SizedBox(width: 6),
-                                        Text(
-                                          'CORE PRINCIPLE / EQUATION',
-                                          style: TextStyle(
-                                            color: AppColors.amber400,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.8,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      slide.formula,
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      p,
                                       style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.5,
+                                        fontSize: 12,
+                                        height: 1.45,
+                                        color: AppColors.slate700,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
-
-                              const SizedBox(height: 16),
-
-                              // Diagram image
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Image.network(
-                                  slide.diagramUrl,
-                                  height: 180,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    height: 120,
-                                    color: AppColors.slate100,
-                                    alignment: Alignment.center,
-                                    child: const Icon(Icons.broken_image_rounded, color: AppColors.slate400),
                                   ),
+                                ],
+                              ),
+                            )),
+
+                        const SizedBox(height: 16),
+
+                        // Formula / Principle Box
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                AppColors.indigo900,
+                                AppColors.indigo950,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.indigo700),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.slideshow_rounded, color: AppColors.amber400, size: 16),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'ACTIVE PRESENTATION DECK',
+                                    style: TextStyle(
+                                      color: AppColors.amber400,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.8,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                slide.formula,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ),
+
+                        if (slide.diagramUrl.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.network(
+                              slide.diagramUrl,
+                              height: 180,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                height: 120,
+                                color: AppColors.slate100,
+                                alignment: Alignment.center,
+                                child: const Icon(Icons.broken_image_rounded, color: AppColors.slate400),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
+                ),
+              ),
+            ),
           ),
 
           // Bottom Slide Navigation Bar

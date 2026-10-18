@@ -16,6 +16,8 @@ import 'live_class_room_controller.dart';
 import '../../../screens/classroom/components/digital_board.dart';
 import '../../../screens/classroom/components/document_viewer.dart';
 import '../../../core/services/pip_service.dart';
+import '../../../core/network/api_client.dart';
+import '../../learning/data/study_material_repository.dart';
 
 const bool kEnableAndroidScreenShare = bool.fromEnvironment('ENABLE_ANDROID_SCREEN_SHARE', defaultValue: false);
 const String kAppCommit = String.fromEnvironment('APP_COMMIT', defaultValue: 'unknown');
@@ -801,10 +803,68 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
   }
 
   Future<void> _pickAndPresentSlides() async {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.slate900,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.slate700,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Present Slides / Notes',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.upload_file_rounded, color: AppColors.primary),
+                title: const Text('Pick PDF from Device', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                subtitle: const Text('Upload PDF slides for synchronized classroom view', style: TextStyle(color: AppColors.slate400, fontSize: 11)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _pickAndUploadPdfFile();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_shared_rounded, color: AppColors.skyBlue),
+                title: const Text('Pick from Batch Study Material', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                subtitle: const Text('Present an existing PDF note from batch materials', style: TextStyle(color: AppColors.slate400, fontSize: 11)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _pickFromStudyMaterials();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickAndUploadPdfFile() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'ppt', 'pptx'],
+        withData: true,
       );
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
@@ -814,14 +874,119 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
           _showToast(context, 'PPT ko PDF me export karo ya screen share karo');
           return;
         }
-        ref.read(liveClassRoomProvider.notifier).setDocPresentation(
-              isOpen: true,
-              title: file.name,
-              page: 1,
-            );
+        if (!nameLower.endsWith('.pdf')) {
+          if (!mounted) return;
+          _showToast(context, 'Only PDF slides are allowed. PPT ko PDF me export karo ya screen share karo');
+          return;
+        }
+
+        if (file.size > 50 * 1024 * 1024) {
+          if (!mounted) return;
+          _showToast(context, 'PDF file ka size 50MB se chhota hona chahiye');
+          return;
+        }
+
+        if (!mounted) return;
+        _showToast(context, 'Uploading slides: ${file.name}...');
+
+        await ref.read(liveClassRoomProvider.notifier).uploadAndPresentSlides(
+          fileName: file.name,
+          fileBytes: file.bytes,
+          filePath: file.path,
+          fileSize: file.size,
+          onError: (msg) {
+            if (mounted) _showToast(context, msg);
+          },
+        );
       }
     } catch (e) {
       debugPrint('[SLIDES] File picker note: $e');
+      if (mounted) _showToast(context, 'File pick error: $e');
+    }
+  }
+
+  Future<void> _pickFromStudyMaterials() async {
+    final batchId = ref.read(liveClassRoomProvider).liveClass?.batchId;
+    if (batchId == null || batchId.isEmpty) {
+      _showToast(context, 'Batch information not found');
+      return;
+    }
+
+    try {
+      final repo = StudyMaterialRepository(apiClient: ApiClient());
+      final res = await repo.getMaterials(batchId, q: null);
+      final pdfItems = res.materials.where((m) => m.kind == 'PDF' || (m.fileName?.toLowerCase().endsWith('.pdf') ?? false)).toList();
+
+      if (!mounted) return;
+      if (pdfItems.isEmpty) {
+        _showToast(context, 'Batch me koi PDF study material uplabdh nahi hai');
+        return;
+      }
+
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: AppColors.slate900,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (ctx) {
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.slate700,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Select Study Material PDF',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: pdfItems.length,
+                    itemBuilder: (context, idx) {
+                      final item = pdfItems[idx];
+                      return ListTile(
+                        leading: const Icon(Icons.picture_as_pdf_rounded, color: AppColors.liveRed),
+                        title: Text(item.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                        subtitle: Text(item.fileName ?? 'PDF Document', style: const TextStyle(color: AppColors.slate400, fontSize: 11)),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          final realUrl = item.url ?? '';
+                          ref.read(liveClassRoomProvider.notifier).setDocPresentation(
+                            isOpen: true,
+                            title: item.title,
+                            page: 1,
+                            totalPages: 1,
+                            url: realUrl,
+                            deckId: item.id,
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      debugPrint('[STUDY_MATERIAL] Fetch error: $e');
+      if (mounted) _showToast(context, 'Study materials load nahi ho paye: $e');
     }
   }
 
@@ -1324,16 +1489,19 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
         : ((roomState.stage == 'SLIDES' || roomState.isDocPresenting)
             ? DocumentViewer(
                 isTeacher: roomState.isHost,
+                docTitle: roomState.docTitle,
+                docUrl: roomState.docUrl,
+                deckId: roomState.docDeckId,
+                fileHash: roomState.docFileHash,
+                totalPages: roomState.docTotalPages,
                 syncedPage: roomState.docPage,
+                errorMessage: roomState.docError,
+                onPickDocument: roomState.isHost ? _pickAndPresentSlides : null,
                 onClose: roomState.isHost
                     ? () => ref.read(liveClassRoomProvider.notifier).setDocPresentation(isOpen: false)
                     : null,
                 onPageChanged: roomState.isHost
-                    ? (page) => ref.read(liveClassRoomProvider.notifier).setDocPresentation(
-                          isOpen: true,
-                          title: roomState.docTitle,
-                          page: page,
-                        )
+                    ? (page) => ref.read(liveClassRoomProvider.notifier).setDocPage(page)
                     : null,
               )
             : _buildVideoStage(roomState));

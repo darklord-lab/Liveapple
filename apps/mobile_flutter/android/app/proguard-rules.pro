@@ -12,6 +12,7 @@
 -keep class livekit.org.webrtc.** { *; }
 -keep class org.webrtc.** { *; }
 -keep class com.cloudwebrtc.webrtc.** { *; }
+-keep class com.classora.classora_mobile.MediaProjectionService { *; }
 
 # Prevent native JNI methods from being renamed/stripped
 -keepclasseswithmembernames class * {

@@ -77,6 +77,37 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+
+        // Screen Share Foreground Service Channel (Android 14+ MediaProjection requirements)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.classora.app/screenshare").apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "startForeground" -> {
+                        try {
+                            val intent = android.content.Intent(this@MainActivity, MediaProjectionService::class.java)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                startForegroundService(intent)
+                            } else {
+                                startService(intent)
+                            }
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("SERVICE_START_FAILED", e.localizedMessage, null)
+                        }
+                    }
+                    "stopForeground" -> {
+                        try {
+                            val intent = android.content.Intent(this@MainActivity, MediaProjectionService::class.java)
+                            stopService(intent)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("SERVICE_STOP_FAILED", e.localizedMessage, null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
     }
 
 
