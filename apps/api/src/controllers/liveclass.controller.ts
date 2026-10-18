@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { LiveClassService } from '../services/liveclass.service.js';
 import { AppError } from '../errors/AppError.js';
+import { getStorageService } from '../services/storage.service.js';
+import { prisma } from '../utils/prisma.js';
 
 const createClassSchema = z.object({
   batchId: z.string().min(1, 'Batch ID is required'),
@@ -123,6 +125,29 @@ export class LiveClassController {
   }
 
   /**
+   * POST /api/v1/classes/start-from-slot
+   */
+  static async startFromSlot(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+      const { slotId, date } = req.body || {};
+      if (!slotId) throw new AppError('BAD_REQUEST', 'slotId is required', 400);
+
+      const targetDate = date ? new Date(date) : new Date();
+      const liveClass = await LiveClassService.startFromSlot(
+        req.user.instituteId,
+        req.user,
+        slotId,
+        targetDate
+      );
+
+      res.status(200).json(liveClass);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * POST /api/v1/classes/:id/token
    * Generates signed LiveKit token for user to join room
    */
@@ -196,6 +221,105 @@ export class LiveClassController {
       );
 
       res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /api/v1/classes/:id/slides
+   * Uploads PDF slides for real-time presentation
+   */
+  static async uploadSlides(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+      const classId = req.params.id;
+      const file = req.file;
+
+      if (!file) {
+        throw new AppError('BAD_REQUEST', 'No file uploaded', 400);
+      }
+
+      const fileName = file.originalname || '';
+      const isPpt =
+        file.mimetype.includes('powerpoint') ||
+        file.mimetype.includes('presentationml') ||
+        fileName.toLowerCase().endsWith('.ppt') ||
+        fileName.toLowerCase().endsWith('.pptx');
+
+      if (isPpt) {
+        throw new AppError('BAD_REQUEST', 'PPT ko PDF me export karo ya screen share karo', 400);
+      }
+
+      if (file.mimetype !== 'application/pdf' && !fileName.toLowerCase().endsWith('.pdf')) {
+        throw new AppError('BAD_REQUEST', 'Only PDF slides are allowed. PPT ko PDF me export karo ya screen share karo', 400);
+      }
+
+      if (file.size > 25 * 1024 * 1024) {
+        throw new AppError('BAD_REQUEST', 'File exceeds maximum allowed size of 25MB', 400);
+      }
+
+      const liveClass = await prisma.liveClass.findFirst({
+        where: { id: classId, instituteId: req.user.instituteId },
+        include: { batch: true },
+      });
+
+      if (!liveClass) {
+        throw new AppError('NOT_FOUND', 'Live class not found', 404);
+      }
+
+      const teacherId = req.user.userId || req.user.id;
+      if (req.user.role === 'TEACHER' && liveClass.teacherId !== teacherId) {
+        throw new AppError('FORBIDDEN', 'Only the class teacher can upload slides', 403);
+      }
+
+      const storage = getStorageService();
+      const storageResult = await storage.put({
+        buffer: file.buffer,
+        originalname: file.originalname,
+        mimetype: file.mimetype || 'application/pdf',
+        size: file.size,
+      });
+
+      res.status(201).json({
+        success: true,
+        fileKey: storageResult.key,
+        streamUrl: `/api/v1/classes/${classId}/slides/${storageResult.key}`,
+        data: {
+          fileKey: storageResult.key,
+          url: `/api/v1/classes/${classId}/slides/${storageResult.key}`,
+          fileName: file.originalname,
+          fileSize: file.size,
+          mimeType: 'application/pdf',
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /api/v1/classes/:id/slides/:key
+   */
+  static async downloadSlide(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+      const { id: classId, key } = req.params;
+
+      const liveClass = await prisma.liveClass.findFirst({
+        where: { id: classId, instituteId: req.user.instituteId },
+      });
+
+      if (!liveClass) {
+        throw new AppError('NOT_FOUND', 'Class not found', 404);
+      }
+
+      const storage = getStorageService();
+      const stream = await storage.getStream(key);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${key}.pdf"`);
+      stream.pipe(res);
     } catch (err) {
       next(err);
     }

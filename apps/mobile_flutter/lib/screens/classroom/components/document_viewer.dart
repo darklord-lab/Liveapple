@@ -62,7 +62,20 @@ class _DocumentViewerState extends State<DocumentViewer> {
       );
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
-        final isPdf = file.name.toLowerCase().endsWith('.pdf');
+        final nameLower = file.name.toLowerCase();
+        if (nameLower.endsWith('.ppt') || nameLower.endsWith('.pptx')) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('PPT ko PDF me export karo ya screen share karo'),
+                backgroundColor: AppColors.rose,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
+        }
+        final isPdf = nameLower.endsWith('.pdf');
         final newDoc = DocumentItem(
           id: 'picked_${DateTime.now().millisecondsSinceEpoch}',
           title: file.name,

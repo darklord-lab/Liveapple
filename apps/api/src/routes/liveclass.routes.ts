@@ -2,11 +2,16 @@ import { Router } from 'express';
 import { LiveClassController } from '../controllers/liveclass.controller.js';
 import { authenticate, requireRole } from '../middlewares/auth.js';
 import { tenantGuard } from '../middlewares/tenant.js';
+import { upload } from './material.routes.js';
 
 const router = Router();
 
 // All class routes require authentication and institute tenant scoping
 router.use(authenticate, tenantGuard);
+
+// PDF Slides upload & download
+router.post('/:id/slides', requireRole(['ADMIN', 'TEACHER']), upload.single('file'), LiveClassController.uploadSlides);
+router.get('/:id/slides/:key', LiveClassController.downloadSlide);
 
 // List classes
 router.get('/', LiveClassController.listClasses);
@@ -16,6 +21,9 @@ router.post('/', requireRole(['ADMIN', 'TEACHER']), LiveClassController.createCl
 
 // Auto-generate upcoming classes from recurring timetable slots (Admin or Teacher)
 router.post('/generate-upcoming', requireRole(['ADMIN', 'TEACHER']), LiveClassController.generateUpcoming);
+
+// Start live class directly from a timetable slot idempotently (Admin or Teacher)
+router.post('/start-from-slot', requireRole(['ADMIN', 'TEACHER']), LiveClassController.startFromSlot);
 
 // Get single class details
 router.get('/:id', LiveClassController.getClassById);

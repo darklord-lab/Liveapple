@@ -1,6 +1,8 @@
 import { Server, Socket } from 'socket.io';
 import { verifyAccessToken } from '../utils/jwt.js';
 import { prisma } from '../utils/prisma.js';
+import { LiveKitService } from '../services/livekit.service.js';
+import { TrackSource } from 'livekit-server-sdk';
 
 interface ChatMessage {
   id: string;
@@ -36,7 +38,18 @@ const roomChatHistory = new Map<string, ChatMessage[]>();
 const hostDisconnectTimers = new Map<string, NodeJS.Timeout>();
 const roomStages = new Map<string, 'VIDEO' | 'SCREEN' | 'BOARD' | 'SLIDES'>();
 const roomBoardStrokes = new Map<string, any[]>();
-const roomDocStates = new Map<string, { isOpen: boolean; title?: string; page?: number; totalPages?: number }>();
+export interface RoomDocState {
+  isOpen: boolean;
+  title?: string;
+  url?: string;
+  page?: number;
+  totalPages?: number;
+  zoom?: number;
+  laser?: { x: number; y: number; visible: boolean };
+  annotationsPerPage?: Record<number, any[]>;
+}
+
+const roomDocStates = new Map<string, RoomDocState>();
 const roomMediaModes = new Map<string, 'OPEN' | 'HAND_RAISE_ONLY'>();
 const roomMicLocked = new Map<string, boolean>();
 const userClassSockets = new Map<string, string>(); // userId -> socketId
@@ -112,6 +125,7 @@ export function setupSocketGateway(io: Server) {
         if (oldSocket) {
           oldSocket.emit('class:takeover', { reason: 'Aap dusre device se join ho gaye' });
           oldSocket.leave(roomKey);
+          oldSocket.disconnect(true);
         }
       }
       userClassSockets.set(user.userId, socket.id);
@@ -243,9 +257,16 @@ export function setupSocketGateway(io: Server) {
     });
 
     // Host presents PPT/PDF document slides to all students
-    socket.on('doc:present', (data: { classId: string; isOpen: boolean; title?: string; page?: number; totalPages?: number }) => {
+    socket.on('doc:present', (data: { classId: string; isOpen: boolean; title?: string; url?: string; page?: number; totalPages?: number; zoom?: number }) => {
       if (!isHost) return;
-      roomDocStates.set(data.classId, data);
+      const existing = roomDocStates.get(data.classId) || { isOpen: false };
+      const updatedState: RoomDocState = {
+        ...existing,
+        ...data,
+        page: data.page ?? existing.page ?? 1,
+        zoom: data.zoom ?? existing.zoom ?? 1.0,
+      };
+      roomDocStates.set(data.classId, updatedState);
       if (data.isOpen) {
         roomStages.set(data.classId, 'SLIDES');
         io.to(`class:${data.classId}`).emit('stage:state', { stage: 'SLIDES', mode: 'SLIDES' });
@@ -255,33 +276,182 @@ export function setupSocketGateway(io: Server) {
         io.to(`class:${data.classId}`).emit('stage:state', { stage: 'VIDEO', mode: 'VIDEO' });
         io.to(`class:${data.classId}`).emit('stage:changed', { stage: 'VIDEO', mode: 'VIDEO' });
       }
-      io.to(`class:${data.classId}`).emit('doc:present', data);
+      io.to(`class:${data.classId}`).emit('doc:present', updatedState);
     });
 
+    // Page navigation (next/prev/jump)
+    socket.on('doc:page', (data: { classId: string; page: number }) => {
+      if (!isHost) return;
+      const docState = roomDocStates.get(data.classId);
+      if (docState) {
+        docState.page = data.page;
+        roomDocStates.set(data.classId, docState);
+      }
+      io.to(`class:${data.classId}`).emit('doc:page', { page: data.page });
+    });
+
+    // Zoom level sync
+    socket.on('doc:zoom', (data: { classId: string; zoom: number }) => {
+      if (!isHost) return;
+      const docState = roomDocStates.get(data.classId);
+      if (docState) {
+        docState.zoom = data.zoom;
+        roomDocStates.set(data.classId, docState);
+      }
+      io.to(`class:${data.classId}`).emit('doc:zoom', { zoom: data.zoom });
+    });
+
+    // Laser pointer broadcast
+    socket.on('doc:laser', (data: { classId: string; x: number; y: number; visible: boolean }) => {
+      if (!isHost) return;
+      const docState = roomDocStates.get(data.classId);
+      if (docState) {
+        docState.laser = { x: data.x, y: data.y, visible: data.visible };
+      }
+      socket.to(`class:${data.classId}`).emit('doc:laser', { x: data.x, y: data.y, visible: data.visible });
+    });
+
+    // Pen annotations per page
+    socket.on('doc:annotate', (data: { classId: string; page: number; stroke: any }) => {
+      if (!isHost) return;
+      const docState = roomDocStates.get(data.classId);
+      if (docState) {
+        if (!docState.annotationsPerPage) docState.annotationsPerPage = {};
+        if (!docState.annotationsPerPage[data.page]) docState.annotationsPerPage[data.page] = [];
+        if (docState.annotationsPerPage[data.page].length < 1000) {
+          docState.annotationsPerPage[data.page].push(data.stroke);
+        }
+        roomDocStates.set(data.classId, docState);
+      }
+      socket.to(`class:${data.classId}`).emit('doc:annotate', { page: data.page, stroke: data.stroke });
+    });
+
+    // Clear annotations for a page
+    socket.on('doc:clear_annotations', (data: { classId: string; page: number }) => {
+      if (!isHost) return;
+      const docState = roomDocStates.get(data.classId);
+      if (docState && docState.annotationsPerPage) {
+        docState.annotationsPerPage[data.page] = [];
+        roomDocStates.set(data.classId, docState);
+      }
+      io.to(`class:${data.classId}`).emit('doc:clear_annotations', { page: data.page });
+    });
+
+    // Helper to get LiveKit room name for a class
+    async function getRoomNameForClass(classId: string): Promise<string> {
+      try {
+        const room = await prisma.liveClass.findUnique({
+          where: { id: classId },
+          select: { livekitRoom: true },
+        });
+        return room?.livekitRoom || `room-${classId}`;
+      } catch {
+        return `room-${classId}`;
+      }
+    }
+
     // Media mode & mic locks (OPEN | HAND_RAISE_ONLY)
-    socket.on('media:mode:set', (data: { classId: string; mode: 'OPEN' | 'HAND_RAISE_ONLY' }) => {
+    socket.on('media:mode:set', async (data: { classId: string; mode: 'OPEN' | 'HAND_RAISE_ONLY' }) => {
       if (!isHost) return;
       roomMediaModes.set(data.classId, data.mode);
       io.to(`class:${data.classId}`).emit('media:mode:state', { mode: data.mode });
+
+      const isLocked = data.mode === 'HAND_RAISE_ONLY';
+      roomMicLocked.set(data.classId, isLocked);
+      io.to(`class:${data.classId}`).emit('host:muted', { isLocked });
+
+      try {
+        const roomName = await getRoomNameForClass(data.classId);
+        const participants = await LiveKitService.listParticipants(roomName);
+        for (const p of participants) {
+          const meta = p.metadata ? JSON.parse(p.metadata) : {};
+          if (meta.role !== 'TEACHER' && meta.role !== 'ADMIN') {
+            await LiveKitService.updateParticipantPermissions(roomName, p.identity, !isLocked);
+          }
+        }
+      } catch {
+        // ignore in dev/offline
+      }
     });
 
-    socket.on('host:muteAll', (data: { classId: string; lock?: boolean }) => {
+    socket.on('host:muteAll', async (data: { classId: string; lock?: boolean }) => {
       if (!isHost) return;
       if (data.lock) {
         roomMicLocked.set(data.classId, true);
       }
       io.to(`class:${data.classId}`).emit('host:muted', { isLocked: !!data.lock });
+
+      try {
+        const roomName = await getRoomNameForClass(data.classId);
+        await LiveKitService.muteAll(roomName);
+        if (data.lock) {
+          const participants = await LiveKitService.listParticipants(roomName);
+          for (const p of participants) {
+            const meta = p.metadata ? JSON.parse(p.metadata) : {};
+            if (meta.role !== 'TEACHER' && meta.role !== 'ADMIN') {
+              await LiveKitService.updateParticipantPermissions(roomName, p.identity, false);
+            }
+          }
+        }
+      } catch {
+        // ignore in dev
+      }
     });
 
-    socket.on('host:unlockMic', (data: { classId: string }) => {
+    socket.on('host:unlockMic', async (data: { classId: string }) => {
       if (!isHost) return;
       roomMicLocked.set(data.classId, false);
       io.to(`class:${data.classId}`).emit('host:unlocked');
+
+      try {
+        const roomName = await getRoomNameForClass(data.classId);
+        const participants = await LiveKitService.listParticipants(roomName);
+        for (const p of participants) {
+          const meta = p.metadata ? JSON.parse(p.metadata) : {};
+          if (meta.role !== 'TEACHER' && meta.role !== 'ADMIN') {
+            await LiveKitService.updateParticipantPermissions(roomName, p.identity, true);
+          }
+        }
+      } catch {
+        // ignore in dev
+      }
     });
 
-    socket.on('host:allowSpeak', (data: { classId: string; studentId: string }) => {
+    socket.on('host:allowSpeak', async (data: { classId: string; studentId: string }) => {
       if (!isHost) return;
       emitToUser(data.studentId, 'host:allowSpeak', { classId: data.classId });
+      try {
+        const roomName = await getRoomNameForClass(data.classId);
+        await LiveKitService.updateParticipantPermissions(roomName, data.studentId, true);
+      } catch {
+        // ignore in dev
+      }
+    });
+
+    socket.on('host:student:action', async (data: {
+      classId: string;
+      studentId: string;
+      action: 'MUTE_MIC' | 'ALLOW_MIC' | 'STOP_CAM' | 'REMOVE';
+    }) => {
+      if (!isHost) return;
+      try {
+        const roomName = await getRoomNameForClass(data.classId);
+        if (data.action === 'MUTE_MIC') {
+          await LiveKitService.muteParticipantTrack(roomName, data.studentId, TrackSource.MICROPHONE);
+          emitToUser(data.studentId, 'host:muted', { isLocked: true });
+        } else if (data.action === 'ALLOW_MIC') {
+          await LiveKitService.updateParticipantPermissions(roomName, data.studentId, true);
+          emitToUser(data.studentId, 'host:allowSpeak', { classId: data.classId });
+        } else if (data.action === 'STOP_CAM') {
+          await LiveKitService.muteParticipantTrack(roomName, data.studentId, TrackSource.CAMERA);
+          emitToUser(data.studentId, 'host:stopCamera', { classId: data.classId });
+        } else if (data.action === 'REMOVE') {
+          await LiveKitService.removeParticipant(roomName, data.studentId);
+          emitToUser(data.studentId, 'class:removed', { reason: 'Teacher ne aapko class se remove kiya' });
+        }
+      } catch {
+        // ignore in dev
+      }
     });
 
     // Host grants student drawing permission

@@ -44,11 +44,6 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- Flutter WebRTC foreground service for media projection screen capture -->
-        <service
-            android:name="com.cloudwebrtc.webrtc.FlutterRTCForegroundService"
-            android:foregroundServiceType="mediaProjection"
-            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

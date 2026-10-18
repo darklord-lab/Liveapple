@@ -1266,6 +1266,35 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
     }
   }
 
+  void lowerStudentHand(String studentId) {
+    if (_currentClassId != null && state.isHost) {
+      _socket?.emit('hand:lower', {
+        'classId': _currentClassId,
+        'studentId': studentId,
+      });
+    }
+  }
+
+  void muteStudentMic(String studentId) {
+    if (_currentClassId != null && state.isHost) {
+      _socket?.emit('host:student:action', {
+        'classId': _currentClassId,
+        'studentId': studentId,
+        'action': 'MUTE_MIC',
+      });
+    }
+  }
+
+  void stopStudentCamera(String studentId) {
+    if (_currentClassId != null && state.isHost) {
+      _socket?.emit('host:student:action', {
+        'classId': _currentClassId,
+        'studentId': studentId,
+        'action': 'STOP_CAM',
+      });
+    }
+  }
+
   void setStage(String newStage) {
     if (_currentClassId != null && state.isHost) {
       final eventStr = 'mode: $newStage at ${DateTime.now().toIso8601String()}';

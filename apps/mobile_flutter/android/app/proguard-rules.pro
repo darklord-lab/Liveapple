@@ -7,6 +7,7 @@
 -keep class io.flutter.plugins.**  { *; }
 
 # LiveKit & WebRTC Keep Rules
+-keep class io.livekit.plugin.** { *; }
 -keep class io.livekit.android.** { *; }
 -keep class livekit.org.webrtc.** { *; }
 -keep class org.webrtc.** { *; }
