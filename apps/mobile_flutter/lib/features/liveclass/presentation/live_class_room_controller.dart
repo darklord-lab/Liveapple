@@ -14,6 +14,7 @@ import '../../../core/network/endpoints.dart';
 import '../../../core/network/api_client.dart';
 import 'package:dio/dio.dart';
 import '../../../core/errors/app_exception.dart';
+import '../../../models/slide_deck_model.dart';
 import 'live_class_controller.dart';
 
 class ChatMessageItem {
@@ -132,6 +133,15 @@ class LiveClassRoomState {
   final int boardEventsSent;
   final int boardEventsReceived;
   final bool snapshotReceived;
+  final String? slidesDeckId;
+  final String? slidesFileHash;
+  final String? slidesFetchStatus;
+  final int? slidesBytesLoaded;
+  final String? slidesReceiveSource;
+  final String? slidesRenderError;
+  final bool isSlidesUploading;
+  final double? slidesUploadProgress;
+  final bool isSharedWithStudents;
 
   LiveClassRoomState({
     this.liveClass,
@@ -177,6 +187,15 @@ class LiveClassRoomState {
     this.boardEventsSent = 0,
     this.boardEventsReceived = 0,
     this.snapshotReceived = false,
+    this.slidesDeckId,
+    this.slidesFileHash,
+    this.slidesFetchStatus,
+    this.slidesBytesLoaded,
+    this.slidesReceiveSource,
+    this.slidesRenderError,
+    this.isSlidesUploading = false,
+    this.slidesUploadProgress,
+    this.isSharedWithStudents = false,
   });
 
   LiveClassRoomState copyWith({
@@ -223,6 +242,15 @@ class LiveClassRoomState {
     int? boardEventsSent,
     int? boardEventsReceived,
     bool? snapshotReceived,
+    String? slidesDeckId,
+    String? slidesFileHash,
+    String? slidesFetchStatus,
+    int? slidesBytesLoaded,
+    String? slidesReceiveSource,
+    String? slidesRenderError,
+    bool? isSlidesUploading,
+    double? slidesUploadProgress,
+    bool? isSharedWithStudents,
     bool clearLocalVideo = false,
     bool clearLocalAudio = false,
     bool clearRemoteScreenShare = false,
@@ -273,6 +301,15 @@ class LiveClassRoomState {
       boardEventsSent: boardEventsSent ?? this.boardEventsSent,
       boardEventsReceived: boardEventsReceived ?? this.boardEventsReceived,
       snapshotReceived: snapshotReceived ?? this.snapshotReceived,
+      slidesDeckId: slidesDeckId ?? this.slidesDeckId,
+      slidesFileHash: slidesFileHash ?? this.slidesFileHash,
+      slidesFetchStatus: slidesFetchStatus ?? this.slidesFetchStatus,
+      slidesBytesLoaded: slidesBytesLoaded ?? this.slidesBytesLoaded,
+      slidesReceiveSource: slidesReceiveSource ?? this.slidesReceiveSource,
+      slidesRenderError: slidesRenderError ?? this.slidesRenderError,
+      isSlidesUploading: isSlidesUploading ?? this.isSlidesUploading,
+      slidesUploadProgress: slidesUploadProgress ?? this.slidesUploadProgress,
+      isSharedWithStudents: isSharedWithStudents ?? this.isSharedWithStudents,
     );
   }
 }
@@ -626,6 +663,10 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
             }
           }
 
+          final docMap = docData is Map ? Map<String, dynamic>.from(docData) : null;
+          final slideDeck = docMap != null ? SlideDeckModel.fromJson(docMap) : null;
+          final isDocOpen = (docMap != null && docMap['isOpen'] == true) || st == 'SLIDES';
+
           state = state.copyWith(
             snapshotReceived: true,
             isRoomJoined: true,
@@ -633,11 +674,14 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
             isMicLocked: isLocked,
             isWhiteboardOpen: isBoardOpen,
             isBoardAllowed: state.isHost || canDraw,
-            isDocPresenting: docData != null && docData['isOpen'] == true,
-            docTitle: docData?['title']?.toString() ?? '',
-            docPage: (docData?['page'] as num?)?.toInt() ?? 1,
-            docUrl: docData?['url']?.toString(),
-            docTotalPages: (docData?['totalPages'] as num?)?.toInt() ?? 1,
+            isDocPresenting: isDocOpen,
+            docTitle: slideDeck?.fileName ?? docData?['title']?.toString() ?? '',
+            docPage: slideDeck?.currentPage ?? (docData?['page'] as num?)?.toInt() ?? 1,
+            docUrl: slideDeck?.url ?? docData?['url']?.toString(),
+            docTotalPages: slideDeck?.totalPages ?? (docData?['totalPages'] as num?)?.toInt() ?? 1,
+            slidesDeckId: slideDeck?.deckId,
+            slidesFileHash: slideDeck?.fileHash,
+            slidesReceiveSource: 'snapshot',
             lastStageEventReceived: 'mode: $st (snapshot) at ${DateTime.now().toIso8601String()}',
           );
         }
@@ -744,25 +788,24 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
       // 8c. Document Presentation Sync event (Teacher presents to all students)
       _socket?.on('doc:present', (data) {
         if (data is Map) {
-          final isOpen = data['isOpen'] as bool? ?? false;
-          final title = data['title'] as String? ?? '';
-          final page = (data['page'] as num?)?.toInt() ?? 1;
-          final url = data['url'] as String?;
-          final totalPages = (data['totalPages'] as num?)?.toInt() ?? 1;
+          final deck = SlideDeckModel.fromJson(Map<String, dynamic>.from(data));
           state = state.copyWith(
-            isDocPresenting: isOpen,
-            docTitle: title,
-            docPage: page,
-            docUrl: url,
-            docTotalPages: totalPages,
-            stage: isOpen ? 'SLIDES' : (state.isWhiteboardOpen ? 'BOARD' : 'VIDEO'),
+            isDocPresenting: deck.isOpen,
+            docTitle: deck.fileName,
+            docPage: deck.currentPage,
+            docUrl: deck.url,
+            docTotalPages: deck.totalPages,
+            slidesDeckId: deck.deckId.isNotEmpty ? deck.deckId : state.slidesDeckId,
+            slidesFileHash: deck.fileHash ?? state.slidesFileHash,
+            slidesReceiveSource: 'event',
+            stage: deck.isOpen ? 'SLIDES' : (state.isWhiteboardOpen ? 'BOARD' : 'VIDEO'),
           );
         }
       });
 
       _socket?.on('doc:page', (data) {
         if (data is Map) {
-          final page = (data['page'] as num?)?.toInt() ?? 1;
+          final page = (data['currentPage'] ?? data['page'] as num?)?.toInt() ?? 1;
           state = state.copyWith(docPage: page);
         }
       });
@@ -1317,14 +1360,18 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
     String? path,
     String? url,
     int? totalPages,
+    String? deckId,
+    String? fileHash,
   }) {
     state = state.copyWith(
       isDocPresenting: isOpen,
-      docTitle: title,
+      docTitle: title.isNotEmpty ? title : state.docTitle,
       docPage: page,
       docPath: path ?? (isOpen ? state.docPath : null),
       docUrl: url ?? (isOpen ? state.docUrl : null),
       docTotalPages: totalPages ?? state.docTotalPages,
+      slidesDeckId: deckId ?? (isOpen ? state.slidesDeckId : null),
+      slidesFileHash: fileHash ?? (isOpen ? state.slidesFileHash : null),
       clearDocPath: !isOpen,
       clearDocUrl: !isOpen,
       stage: isOpen ? 'SLIDES' : (state.isWhiteboardOpen ? 'BOARD' : 'VIDEO'),
@@ -1333,10 +1380,16 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
       _socket?.emit('doc:present', {
         'classId': _currentClassId,
         'isOpen': isOpen,
-        'title': title,
+        'deckId': deckId ?? state.slidesDeckId,
+        'title': title.isNotEmpty ? title : state.docTitle,
+        'fileName': title.isNotEmpty ? title : state.docTitle,
         'page': page,
+        'currentPage': page,
         if (url != null || state.docUrl != null) 'url': url ?? state.docUrl,
-        if (totalPages != null) 'totalPages': totalPages,
+        if (url != null || state.docUrl != null) 'streamUrl': url ?? state.docUrl,
+        if (totalPages != null || state.docTotalPages > 0) 'totalPages': totalPages ?? state.docTotalPages,
+        if (fileHash != null || state.slidesFileHash != null) 'fileHash': fileHash ?? state.slidesFileHash,
+        'stage': 'SLIDES',
       });
     }
   }
@@ -1347,14 +1400,21 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
       _socket?.emit('doc:page', {
         'classId': _currentClassId,
         'page': page,
+        'currentPage': page,
       });
       _socket?.emit('doc:present', {
         'classId': _currentClassId,
         'isOpen': true,
+        'deckId': state.slidesDeckId,
         'title': state.docTitle,
+        'fileName': state.docTitle,
         'page': page,
+        'currentPage': page,
         if (state.docUrl != null) 'url': state.docUrl,
+        if (state.docUrl != null) 'streamUrl': state.docUrl,
         'totalPages': state.docTotalPages,
+        if (state.slidesFileHash != null) 'fileHash': state.slidesFileHash,
+        'stage': 'SLIDES',
       });
     }
   }
@@ -1365,21 +1425,19 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
     Uint8List? fileBytes,
     int? fileSize,
     void Function(String error)? onError,
+    void Function(String message)? onSuccess,
   }) async {
     if (_currentClassId == null) {
       onError?.call('Class session active nahi hai');
       return;
     }
 
-    // 1. Immediately present on host device with local file
-    setDocPresentation(
-      isOpen: true,
-      title: fileName,
-      path: filePath,
-      page: 1,
+    state = state.copyWith(
+      isSlidesUploading: true,
+      slidesUploadProgress: 0.1,
+      isSharedWithStudents: false,
     );
 
-    // 2. Upload to backend so students receive and render the PDF
     try {
       MultipartFile multipartFile;
       if (filePath != null && filePath.isNotEmpty && !kIsWeb) {
@@ -1387,6 +1445,8 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
       } else if (fileBytes != null && fileBytes.isNotEmpty) {
         multipartFile = MultipartFile.fromBytes(fileBytes, filename: fileName);
       } else {
+        state = state.copyWith(isSlidesUploading: false);
+        onError?.call('File select nahi hui');
         return;
       }
 
@@ -1394,22 +1454,63 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
       final res = await ApiClient().dio.post(
         '${Endpoints.classes}/$_currentClassId/slides',
         data: formData,
+        onSendProgress: (sent, total) {
+          if (total > 0) {
+            state = state.copyWith(slidesUploadProgress: sent / total);
+          }
+        },
       );
 
-      final data = res.data;
-      final serverUrl = data is Map ? (data['streamUrl'] ?? data['data']?['url']) : null;
-      if (serverUrl != null && serverUrl is String) {
-        setDocPresentation(
-          isOpen: true,
-          title: fileName,
-          path: filePath,
-          url: serverUrl,
-          page: state.docPage,
-        );
-      }
+      final resData = res.data;
+      final rawDeck = (resData is Map && resData['data'] is Map) ? resData['data'] : resData;
+      final deck = (rawDeck is Map) ? SlideDeckModel.fromJson(Map<String, dynamic>.from(rawDeck)) : null;
+
+      final serverUrl = deck?.url ?? (resData is Map ? (resData['streamUrl'] ?? resData['url']) : null);
+      final totalPages = deck?.totalPages ?? (resData is Map ? (resData['totalPages'] as num?)?.toInt() : null) ?? 1;
+      final deckId = deck?.deckId ?? (resData is Map ? (resData['deckId']?.toString()) : null);
+      final fileHash = deck?.fileHash;
+
+      state = state.copyWith(
+        isSlidesUploading: false,
+        slidesUploadProgress: 1.0,
+        isSharedWithStudents: true,
+        slidesDeckId: deckId,
+        slidesFileHash: fileHash,
+      );
+
+      setDocPresentation(
+        isOpen: true,
+        title: fileName,
+        path: filePath,
+        url: serverUrl?.toString(),
+        totalPages: totalPages,
+        deckId: deckId,
+        fileHash: fileHash,
+        page: 1,
+      );
+
+      onSuccess?.call('Shared with students');
     } catch (e) {
-      debugPrint('[SLIDES_UPLOAD] Upload note: $e');
+      state = state.copyWith(
+        isSlidesUploading: false,
+        isSharedWithStudents: false,
+      );
+      const errMsg = 'Upload fail hua, students ko slides nahi dikhengi';
+      debugPrint('[SLIDES_UPLOAD] $errMsg: $e');
+      onError?.call(errMsg);
     }
+  }
+
+  void updateSlidesDiagnostics({
+    String? fetchStatus,
+    int? bytesLoaded,
+    String? renderError,
+  }) {
+    state = state.copyWith(
+      slidesFetchStatus: fetchStatus ?? state.slidesFetchStatus,
+      slidesBytesLoaded: bytesLoaded ?? state.slidesBytesLoaded,
+      slidesRenderError: renderError ?? state.slidesRenderError,
+    );
   }
 
   void toggleHandRaise(String userName) {

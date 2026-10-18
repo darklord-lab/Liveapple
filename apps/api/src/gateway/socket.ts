@@ -40,10 +40,17 @@ const roomStages = new Map<string, 'VIDEO' | 'SCREEN' | 'BOARD' | 'SLIDES'>();
 const roomBoardStrokes = new Map<string, any[]>();
 export interface RoomDocState {
   isOpen: boolean;
+  deckId?: string;
+  classId?: string;
   title?: string;
+  fileName?: string;
   url?: string;
+  streamUrl?: string;
   page?: number;
+  currentPage?: number;
   totalPages?: number;
+  fileHash?: string;
+  stage?: 'SLIDES';
   zoom?: number;
   laser?: { x: number; y: number; visible: boolean };
   annotationsPerPage?: Record<number, any[]>;
@@ -257,13 +264,41 @@ export function setupSocketGateway(io: Server) {
     });
 
     // Host presents PPT/PDF document slides to all students
-    socket.on('doc:present', (data: { classId: string; isOpen: boolean; title?: string; url?: string; page?: number; totalPages?: number; zoom?: number }) => {
+    socket.on('doc:present', (data: {
+      classId: string;
+      isOpen: boolean;
+      deckId?: string;
+      title?: string;
+      fileName?: string;
+      url?: string;
+      streamUrl?: string;
+      page?: number;
+      currentPage?: number;
+      totalPages?: number;
+      fileHash?: string;
+      zoom?: number;
+    }) => {
       if (!isHost) return;
       const existing = roomDocStates.get(data.classId) || { isOpen: false };
+      const curPage = data.currentPage ?? data.page ?? existing.currentPage ?? existing.page ?? 1;
+      const totalP = data.totalPages ?? existing.totalPages ?? 1;
+      const deckUrl = data.url || data.streamUrl || existing.url || existing.streamUrl;
+      const name = data.fileName || data.title || existing.fileName || existing.title || '';
+
       const updatedState: RoomDocState = {
         ...existing,
         ...data,
-        page: data.page ?? existing.page ?? 1,
+        deckId: data.deckId || existing.deckId,
+        isOpen: data.isOpen,
+        title: name,
+        fileName: name,
+        url: deckUrl,
+        streamUrl: deckUrl,
+        page: curPage,
+        currentPage: curPage,
+        totalPages: totalP,
+        fileHash: data.fileHash || existing.fileHash,
+        stage: 'SLIDES',
         zoom: data.zoom ?? existing.zoom ?? 1.0,
       };
       roomDocStates.set(data.classId, updatedState);
@@ -280,14 +315,16 @@ export function setupSocketGateway(io: Server) {
     });
 
     // Page navigation (next/prev/jump)
-    socket.on('doc:page', (data: { classId: string; page: number }) => {
+    socket.on('doc:page', (data: { classId: string; page?: number; currentPage?: number }) => {
       if (!isHost) return;
+      const targetPage = data.currentPage ?? data.page ?? 1;
       const docState = roomDocStates.get(data.classId);
       if (docState) {
-        docState.page = data.page;
+        docState.page = targetPage;
+        docState.currentPage = targetPage;
         roomDocStates.set(data.classId, docState);
       }
-      io.to(`class:${data.classId}`).emit('doc:page', { page: data.page });
+      io.to(`class:${data.classId}`).emit('doc:page', { page: targetPage, currentPage: targetPage });
     });
 
     // Zoom level sync

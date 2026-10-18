@@ -12,12 +12,17 @@ class DocumentViewer extends StatefulWidget {
   final VoidCallback? onClose;
   final bool isTeacher;
   final int? syncedPage;
+  final int? syncedTotalPages;
   final String? docTitle;
   final String? docPath;
   final String? docUrl;
+  final bool isSharedWithStudents;
+  final bool isUploading;
+  final double? uploadProgress;
   final Function(int page)? onPageChanged;
   final Function(DocumentItem doc)? onDocumentChanged;
   final Function(String path, String name)? onLocalFileSelected;
+  final Function({String? fetchStatus, int? bytesLoaded, String? renderError})? onDiagnosticsUpdate;
 
   const DocumentViewer({
     super.key,
@@ -25,12 +30,17 @@ class DocumentViewer extends StatefulWidget {
     this.onClose,
     this.isTeacher = true,
     this.syncedPage,
+    this.syncedTotalPages,
     this.docTitle,
     this.docPath,
     this.docUrl,
+    this.isSharedWithStudents = false,
+    this.isUploading = false,
+    this.uploadProgress,
     this.onPageChanged,
     this.onDocumentChanged,
     this.onLocalFileSelected,
+    this.onDiagnosticsUpdate,
   });
 
   @override
@@ -54,6 +64,9 @@ class _DocumentViewerState extends State<DocumentViewer> {
     if (widget.syncedPage != null && widget.syncedPage! > 0) {
       _currentPage = widget.syncedPage! - 1;
     }
+    if (widget.syncedTotalPages != null && widget.syncedTotalPages! > 0) {
+      _totalPages = widget.syncedTotalPages!;
+    }
     _resolveDocument();
   }
 
@@ -63,6 +76,10 @@ class _DocumentViewerState extends State<DocumentViewer> {
 
     if (widget.docTitle != null && widget.docTitle != _currentTitle) {
       setState(() => _currentTitle = widget.docTitle);
+    }
+
+    if (widget.syncedTotalPages != null && widget.syncedTotalPages! > 0 && widget.syncedTotalPages != _totalPages) {
+      setState(() => _totalPages = widget.syncedTotalPages!);
     }
 
     if (!widget.isTeacher && widget.syncedPage != null) {
@@ -80,30 +97,45 @@ class _DocumentViewerState extends State<DocumentViewer> {
   }
 
   Future<void> _resolveDocument() async {
-    // 1. Check local file path first
+    // 1. Check local file path first (for teacher with local file)
     if (widget.docPath != null && widget.docPath!.isNotEmpty) {
       final file = File(widget.docPath!);
       if (file.existsSync()) {
-        setState(() {
-          _resolvedPdfPath = widget.docPath;
-          _isDownloading = false;
-          _errorMessage = null;
-        });
+        if (mounted) {
+          setState(() {
+            _resolvedPdfPath = widget.docPath;
+            _isDownloading = false;
+            _errorMessage = null;
+          });
+        }
+        widget.onDiagnosticsUpdate?.call(
+          fetchStatus: '200 OK (Local)',
+          bytesLoaded: file.lengthSync(),
+        );
         return;
       }
     }
 
-    // 2. Download from remote URL if provided
+    // 2. Download from remote URL if provided (for student or remote view)
     if (widget.docUrl != null && widget.docUrl!.isNotEmpty) {
-      setState(() {
-        _isDownloading = true;
-        _errorMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          _isDownloading = true;
+          _errorMessage = null;
+        });
+      }
+      widget.onDiagnosticsUpdate?.call(fetchStatus: 'Downloading...');
 
       try {
-        final tempDir = await getTemporaryDirectory();
+        String tempPath = Directory.systemTemp.path;
+        try {
+          final tempDir = await getTemporaryDirectory().timeout(const Duration(milliseconds: 300));
+          tempPath = tempDir.path;
+        } catch (_) {
+          tempPath = Directory.systemTemp.path;
+        }
         final sanitized = widget.docUrl!.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-        final targetFile = File('${tempDir.path}/slides_$sanitized.pdf');
+        final targetFile = File('$tempPath/slides_$sanitized.pdf');
 
         if (!targetFile.existsSync() || targetFile.lengthSync() == 0) {
           final dio = ApiClient().dio;
@@ -115,7 +147,16 @@ class _DocumentViewerState extends State<DocumentViewer> {
             final path = downloadUrl.startsWith('/') ? downloadUrl : '/$downloadUrl';
             downloadUrl = '$base$path';
           }
-          await dio.download(downloadUrl, targetFile.path);
+          final res = await dio.download(downloadUrl, targetFile.path);
+          widget.onDiagnosticsUpdate?.call(
+            fetchStatus: '${res.statusCode ?? 200} OK',
+            bytesLoaded: targetFile.lengthSync(),
+          );
+        } else {
+          widget.onDiagnosticsUpdate?.call(
+            fetchStatus: '200 OK (Cached)',
+            bytesLoaded: targetFile.lengthSync(),
+          );
         }
 
         if (mounted) {
@@ -127,13 +168,31 @@ class _DocumentViewerState extends State<DocumentViewer> {
         }
       } catch (e) {
         debugPrint('[DOC_VIEWER] PDF download error: $e');
+        const errorMsg = 'Slides load nahi ho payi';
+        widget.onDiagnosticsUpdate?.call(
+          fetchStatus: 'Error',
+          renderError: e.toString(),
+        );
         if (mounted) {
           setState(() {
             _isDownloading = false;
-            _errorMessage = 'PDF load nahi ho paya: $e';
+            _errorMessage = errorMsg;
           });
         }
       }
+      return;
+    }
+
+    // 3. For students when presentation is open but URL is still pending
+    if (!widget.isTeacher && (widget.docTitle != null && widget.docTitle!.isNotEmpty)) {
+      if (mounted) {
+        setState(() {
+          _isDownloading = true;
+          _errorMessage = null;
+        });
+      }
+      widget.onDiagnosticsUpdate?.call(fetchStatus: 'Connecting to slide stream...');
+      return;
     }
   }
 
@@ -255,7 +314,7 @@ class _DocumentViewerState extends State<DocumentViewer> {
                       Text(
                         _isPdfReady
                             ? 'Page ${_currentPage + 1} of $_totalPages'
-                            : (_isDownloading ? 'Downloading...' : 'Real PDF Mode'),
+                            : (_isDownloading ? 'Downloading...' : 'PDF Presentation'),
                         style: const TextStyle(
                           color: AppColors.indigo300,
                           fontSize: 10,
@@ -265,6 +324,54 @@ class _DocumentViewerState extends State<DocumentViewer> {
                     ],
                   ),
                 ),
+
+                // Teacher Upload Progress or Shared Status Badge
+                if (widget.isTeacher && widget.isUploading)
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.primary, width: 0.8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 10,
+                          height: 10,
+                          child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.primary),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Uploading ${widget.uploadProgress != null ? (widget.uploadProgress! * 100).toInt() : 0}%',
+                          style: const TextStyle(color: AppColors.primaryLight, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (widget.isTeacher && widget.isSharedWithStudents)
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.emerald.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.emerald, width: 0.8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle_rounded, color: AppColors.emerald, size: 12),
+                        SizedBox(width: 4),
+                        Text(
+                          'Shared with students',
+                          style: TextStyle(color: AppColors.emerald, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
 
                 if (widget.isTeacher)
                   IconButton(
@@ -382,23 +489,32 @@ class _DocumentViewerState extends State<DocumentViewer> {
               Text(
                 _errorMessage!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
+                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              if (widget.isTeacher)
-                ElevatedButton.icon(
+              ElevatedButton.icon(
+                onPressed: _resolveDocument,
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Dobara koshish karein'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.indigo600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              if (widget.isTeacher) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
                   onPressed: _pickLocalDocument,
                   icon: const Icon(Icons.upload_file_rounded, size: 16),
                   label: const Text('Device se dusri PDF chunein'),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.indigo600),
-                )
-              else
-                ElevatedButton.icon(
-                  onPressed: _resolveDocument,
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('Dobara koshish karein'),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.slate700),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    side: const BorderSide(color: AppColors.slate600),
+                  ),
                 ),
+              ],
             ],
           ),
         ),
@@ -422,9 +538,15 @@ class _DocumentViewerState extends State<DocumentViewer> {
             onRender: (pages) {
               if (mounted) {
                 setState(() {
-                  _totalPages = (pages != null && pages > 0) ? pages : 1;
+                  _totalPages = (pages != null && pages > 0)
+                      ? pages
+                      : (widget.syncedTotalPages ?? _totalPages);
                   _isPdfReady = true;
                 });
+                widget.onDiagnosticsUpdate?.call(
+                  renderError: null,
+                  bytesLoaded: _resolvedPdfPath != null ? File(_resolvedPdfPath!).lengthSync() : null,
+                );
               }
             },
             onViewCreated: (PDFViewController controller) {
@@ -448,12 +570,14 @@ class _DocumentViewerState extends State<DocumentViewer> {
             },
             onError: (error) {
               debugPrint('[PDFView] Error: $error');
+              widget.onDiagnosticsUpdate?.call(renderError: error.toString());
               if (mounted) {
-                setState(() => _errorMessage = 'PDF render error: $error');
+                setState(() => _errorMessage = 'Slides load nahi ho payi');
               }
             },
             onPageError: (page, error) {
               debugPrint('[PDFView] Page $page error: $error');
+              widget.onDiagnosticsUpdate?.call(renderError: 'Page $page: $error');
             },
           ),
           if (!_isPdfReady)

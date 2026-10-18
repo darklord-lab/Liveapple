@@ -84,3 +84,12 @@ If unexpected regressions occur:
 ## 6. Known Limitations
 - **Android Native Screen Share:** Android 14+ requires an interactive system foreground service permission prompt before capturing screen. Default release APK hides the button on Android to prevent crashes; a test build with compile-time flag `ENABLE_ANDROID_SCREEN_SHARE=true` is provided for physical device verification. Web screen share is fully operational.
 - **Physical Device Tests:** Automated CI test suites verify socket protocols, SFU token issuance, and bidirectional data exchange. Real phone testing on physical carriers depends on device-specific battery savers and permission grants.
+
+---
+
+## 7. Real PDF Slides Presentation & Bottom Controls Bar Polish
+- **Shared PDF Slides Contract & Persistence:** Real PDF slides now upload to `/api/v1/classes/:id/slides`, compute SHA-256 and page count, and persist in database table `ClassSlideDeck` to survive Render container restarts.
+- **Student Synchronization & Error Handling:** Students authenticate file download using existing bearer tokens; if download fails, a clear error ("Slides load nahi ho payi") with Retry is shown instead of a perpetual placeholder.
+- **Controls Bar Responsiveness (Zero Clipping):** Re-engineered bottom controls bar to dynamically collapse on compact widths (320-393dp) and 1.3 text scale without text clipping ("Mic", "Video", "Hand", "More", "Leave").
+- **Present Button Icon Restoration:** Fixed active state icon styling so the Present button displays a high-contrast white icon on a vibrant blue circle, eliminating the empty blue circle defect.
+- **Diagnostics Overlay:** Added real-time Slides diagnostics section displaying deckId, totalPages, currentPage, receive source, fetch status, and loaded byte size.

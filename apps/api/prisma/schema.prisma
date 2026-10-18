@@ -575,3 +575,19 @@ model Purchase {
   @@index([offeringId])
 }
 
+model ClassSlideDeck {
+  id          String     @id @default(cuid())
+  instituteId String
+  classId     String
+  fileName    String
+  fileSize    Int
+  fileHash    String
+  mimeType    String     @default("application/pdf")
+  totalPages  Int        @default(1)
+  data        Bytes
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([instituteId, classId])
+}
+

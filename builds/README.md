@@ -10,18 +10,18 @@ This directory stores generated release APKs for the Classora Flutter applicatio
 ## Latest Release Build Information
 
 - **Release Build (Screen share hidden on Android):**
-  - **File:** `builds/Classora-20261018-113345.apk` (and `Classora-Latest.apk`)
-  - **Date:** 2026-10-18 11:33 IST
-  - **App Version:** `2.0.0+1` (Commit: `7c4fd73b`)
-  - **File Size:** 114,357,750 bytes (~109.1 MB)
-  - **SHA-256 Checksum:** `8A09B7D384459AC6D614C84D63DC25133343CBB3BD42B6BCC07B17F623D4F94E`
+  - **File:** `C:\Users\Admin\Desktop\Classora_Updated_APKs\Classora-Latest.apk` (and `Classora-Release.apk`)
+  - **Date:** 2026-10-18 19:48 IST
+  - **App Version:** `2.0.0+1`
+  - **File Size:** 114,519,579 bytes (~109.2 MB)
+  - **SHA-256 Checksum:** `A7186C96A8A9072E2A8157A809CEF223F51879A9FA43AA56FB7508B9E91AD938`
 
 - **Screen Share Test Build (`ENABLE_ANDROID_SCREEN_SHARE=true`):**
-  - **File:** `builds/Classora-SCREENSHARE-TEST-20261018-113345.apk`
-  - **Date:** 2026-10-18 11:44 IST
-  - **App Version:** `2.0.0+1` (Commit: `7c4fd73b`)
-  - **File Size:** 114,422,278 bytes (~109.1 MB)
-  - **SHA-256 Checksum:** `59A9F2EC1684E347AC5EDA252FDB7C686850571BEB51DD5EEA85D91D88C5D73F`
+  - **File:** `C:\Users\Admin\Desktop\Classora_Updated_APKs\Classora-SCREENSHARE-TEST.apk`
+  - **Date:** 2026-10-18 19:55 IST
+  - **App Version:** `2.0.0+1`
+  - **File Size:** 114,519,579 bytes (~109.2 MB)
+  - **SHA-256 Checksum:** `C99566F058AE425CC263F5E59866C223E794184CE9D882B3C09338E470489DA2`
   - **Description:** Compiled specifically for physical phone testing with screen share enabled.
 
 ### Client Experience & Zero-Configuration Architecture
