@@ -11,6 +11,8 @@ import '../domain/live_class_model.dart';
 import '../domain/class_participant.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../../../core/network/endpoints.dart';
+import '../../../core/network/api_client.dart';
+import 'package:dio/dio.dart';
 import '../../../core/errors/app_exception.dart';
 import 'live_class_controller.dart';
 
@@ -101,6 +103,9 @@ class LiveClassRoomState {
   final bool isDocPresenting;
   final String docTitle;
   final int docPage;
+  final String? docPath;
+  final String? docUrl;
+  final int docTotalPages;
   final String? activeSpeakerName;
   final List<ClassParticipant> participants;
   final List<ChatMessageItem> chatMessages;
@@ -143,6 +148,9 @@ class LiveClassRoomState {
     this.isDocPresenting = false,
     this.docTitle = '',
     this.docPage = 1,
+    this.docPath,
+    this.docUrl,
+    this.docTotalPages = 1,
     this.activeSpeakerName,
     this.participants = const [],
     this.chatMessages = const [],
@@ -186,6 +194,9 @@ class LiveClassRoomState {
     bool? isDocPresenting,
     String? docTitle,
     int? docPage,
+    String? docPath,
+    String? docUrl,
+    int? docTotalPages,
     String? activeSpeakerName,
     List<ClassParticipant>? participants,
     List<ChatMessageItem>? chatMessages,
@@ -215,6 +226,8 @@ class LiveClassRoomState {
     bool clearLocalVideo = false,
     bool clearLocalAudio = false,
     bool clearRemoteScreenShare = false,
+    bool clearDocPath = false,
+    bool clearDocUrl = false,
   }) {
     return LiveClassRoomState(
       liveClass: liveClass ?? this.liveClass,
@@ -231,6 +244,9 @@ class LiveClassRoomState {
       isDocPresenting: isDocPresenting ?? this.isDocPresenting,
       docTitle: docTitle ?? this.docTitle,
       docPage: docPage ?? this.docPage,
+      docPath: clearDocPath ? null : (docPath ?? this.docPath),
+      docUrl: clearDocUrl ? null : (docUrl ?? this.docUrl),
+      docTotalPages: docTotalPages ?? this.docTotalPages,
       activeSpeakerName: activeSpeakerName ?? this.activeSpeakerName,
       participants: participants ?? this.participants,
       chatMessages: chatMessages ?? this.chatMessages,
@@ -620,6 +636,8 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
             isDocPresenting: docData != null && docData['isOpen'] == true,
             docTitle: docData?['title']?.toString() ?? '',
             docPage: (docData?['page'] as num?)?.toInt() ?? 1,
+            docUrl: docData?['url']?.toString(),
+            docTotalPages: (docData?['totalPages'] as num?)?.toInt() ?? 1,
             lastStageEventReceived: 'mode: $st (snapshot) at ${DateTime.now().toIso8601String()}',
           );
         }
@@ -728,12 +746,24 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
         if (data is Map) {
           final isOpen = data['isOpen'] as bool? ?? false;
           final title = data['title'] as String? ?? '';
-          final page = data['page'] as int? ?? 1;
+          final page = (data['page'] as num?)?.toInt() ?? 1;
+          final url = data['url'] as String?;
+          final totalPages = (data['totalPages'] as num?)?.toInt() ?? 1;
           state = state.copyWith(
             isDocPresenting: isOpen,
             docTitle: title,
             docPage: page,
+            docUrl: url,
+            docTotalPages: totalPages,
+            stage: isOpen ? 'SLIDES' : (state.isWhiteboardOpen ? 'BOARD' : 'VIDEO'),
           );
+        }
+      });
+
+      _socket?.on('doc:page', (data) {
+        if (data is Map) {
+          final page = (data['page'] as num?)?.toInt() ?? 1;
+          state = state.copyWith(docPage: page);
         }
       });
 
@@ -1280,15 +1310,105 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
     }
   }
 
-  void setDocPresentation({required bool isOpen, String title = '', int page = 1}) {
-    state = state.copyWith(isDocPresenting: isOpen, docTitle: title, docPage: page);
+  void setDocPresentation({
+    required bool isOpen,
+    String title = '',
+    int page = 1,
+    String? path,
+    String? url,
+    int? totalPages,
+  }) {
+    state = state.copyWith(
+      isDocPresenting: isOpen,
+      docTitle: title,
+      docPage: page,
+      docPath: path ?? (isOpen ? state.docPath : null),
+      docUrl: url ?? (isOpen ? state.docUrl : null),
+      docTotalPages: totalPages ?? state.docTotalPages,
+      clearDocPath: !isOpen,
+      clearDocUrl: !isOpen,
+      stage: isOpen ? 'SLIDES' : (state.isWhiteboardOpen ? 'BOARD' : 'VIDEO'),
+    );
     if (_currentClassId != null && state.isHost) {
       _socket?.emit('doc:present', {
         'classId': _currentClassId,
         'isOpen': isOpen,
         'title': title,
         'page': page,
+        if (url != null || state.docUrl != null) 'url': url ?? state.docUrl,
+        if (totalPages != null) 'totalPages': totalPages,
       });
+    }
+  }
+
+  void setDocPage(int page) {
+    state = state.copyWith(docPage: page);
+    if (_currentClassId != null && state.isHost) {
+      _socket?.emit('doc:page', {
+        'classId': _currentClassId,
+        'page': page,
+      });
+      _socket?.emit('doc:present', {
+        'classId': _currentClassId,
+        'isOpen': true,
+        'title': state.docTitle,
+        'page': page,
+        if (state.docUrl != null) 'url': state.docUrl,
+        'totalPages': state.docTotalPages,
+      });
+    }
+  }
+
+  Future<void> uploadAndPresentSlides({
+    required String fileName,
+    String? filePath,
+    Uint8List? fileBytes,
+    int? fileSize,
+    void Function(String error)? onError,
+  }) async {
+    if (_currentClassId == null) {
+      onError?.call('Class session active nahi hai');
+      return;
+    }
+
+    // 1. Immediately present on host device with local file
+    setDocPresentation(
+      isOpen: true,
+      title: fileName,
+      path: filePath,
+      page: 1,
+    );
+
+    // 2. Upload to backend so students receive and render the PDF
+    try {
+      MultipartFile multipartFile;
+      if (filePath != null && filePath.isNotEmpty && !kIsWeb) {
+        multipartFile = await MultipartFile.fromFile(filePath, filename: fileName);
+      } else if (fileBytes != null && fileBytes.isNotEmpty) {
+        multipartFile = MultipartFile.fromBytes(fileBytes, filename: fileName);
+      } else {
+        return;
+      }
+
+      final formData = FormData.fromMap({'file': multipartFile});
+      final res = await ApiClient().dio.post(
+        '${Endpoints.classes}/$_currentClassId/slides',
+        data: formData,
+      );
+
+      final data = res.data;
+      final serverUrl = data is Map ? (data['streamUrl'] ?? data['data']?['url']) : null;
+      if (serverUrl != null && serverUrl is String) {
+        setDocPresentation(
+          isOpen: true,
+          title: fileName,
+          path: filePath,
+          url: serverUrl,
+          page: state.docPage,
+        );
+      }
+    } catch (e) {
+      debugPrint('[SLIDES_UPLOAD] Upload note: $e');
     }
   }
 

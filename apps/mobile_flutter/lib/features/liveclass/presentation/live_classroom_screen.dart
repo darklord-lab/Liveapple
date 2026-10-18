@@ -814,11 +814,23 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
           _showToast(context, 'PPT ko PDF me export karo ya screen share karo');
           return;
         }
-        ref.read(liveClassRoomProvider.notifier).setDocPresentation(
-              isOpen: true,
-              title: file.name,
-              page: 1,
-            );
+
+        if (file.path != null) {
+          await ref.read(liveClassRoomProvider.notifier).uploadAndPresentSlides(
+                fileName: file.name,
+                filePath: file.path,
+                fileBytes: file.bytes,
+                onError: (msg) {
+                  if (mounted) _showToast(context, msg);
+                },
+              );
+        } else {
+          ref.read(liveClassRoomProvider.notifier).setDocPresentation(
+                isOpen: true,
+                title: file.name,
+                page: 1,
+              );
+        }
       }
     } catch (e) {
       debugPrint('[SLIDES] File picker note: $e');
@@ -1325,14 +1337,19 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
             ? DocumentViewer(
                 isTeacher: roomState.isHost,
                 syncedPage: roomState.docPage,
+                docTitle: roomState.docTitle,
+                docPath: roomState.docPath,
+                docUrl: roomState.docUrl,
                 onClose: roomState.isHost
                     ? () => ref.read(liveClassRoomProvider.notifier).setDocPresentation(isOpen: false)
                     : null,
                 onPageChanged: roomState.isHost
-                    ? (page) => ref.read(liveClassRoomProvider.notifier).setDocPresentation(
-                          isOpen: true,
-                          title: roomState.docTitle,
-                          page: page,
+                    ? (page) => ref.read(liveClassRoomProvider.notifier).setDocPage(page)
+                    : null,
+                onLocalFileSelected: roomState.isHost
+                    ? (path, name) => ref.read(liveClassRoomProvider.notifier).uploadAndPresentSlides(
+                          fileName: name,
+                          filePath: path,
                         )
                     : null,
               )
