@@ -1354,9 +1354,13 @@ class _LiveClassroomScreenState extends ConsumerState<LiveClassroomScreen> {
             children: [
               Positioned.fill(
                 child: DigitalBoard(
-                  isTeacher: roomState.isHost || roomState.isBoardAllowed,
-                  onDrawStroke: (stroke) => ref.read(liveClassRoomProvider.notifier).sendDrawStroke(stroke),
-                  onClearBoard: () => ref.read(liveClassRoomProvider.notifier).sendClearBoard(),
+                  isTeacher: roomState.isHost,
+                  onDrawStroke: roomState.isHost
+                      ? (stroke) => ref.read(liveClassRoomProvider.notifier).sendDrawStroke(stroke)
+                      : null,
+                  onClearBoard: roomState.isHost
+                      ? () => ref.read(liveClassRoomProvider.notifier).sendClearBoard()
+                      : null,
                   remoteDrawStream: ref.read(liveClassRoomProvider.notifier).remoteDrawStream,
                   remoteClearStream: ref.read(liveClassRoomProvider.notifier).remoteClearStream,
                 ),

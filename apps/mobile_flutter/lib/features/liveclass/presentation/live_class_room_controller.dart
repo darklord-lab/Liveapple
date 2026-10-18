@@ -1340,6 +1340,7 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
   }
 
   void sendDrawStroke(Map<String, dynamic> stroke) {
+    if (!state.isHost) return;
     if (_currentClassId != null) {
       _boardEventsSent++;
       state = state.copyWith(boardEventsSent: _boardEventsSent);
@@ -1351,6 +1352,7 @@ class LiveClassRoomNotifier extends StateNotifier<LiveClassRoomState> {
   }
 
   void sendClearBoard() {
+    if (!state.isHost) return;
     if (_currentClassId != null) {
       _boardEventsSent++;
       state = state.copyWith(boardEventsSent: _boardEventsSent);

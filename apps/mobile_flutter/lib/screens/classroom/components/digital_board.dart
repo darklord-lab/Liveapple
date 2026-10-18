@@ -160,9 +160,10 @@ class _DigitalBoardState extends State<DigitalBoard> {
       color: Colors.white,
       child: Column(
         children: [
-          // Top Whiteboard Toolbar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          // Whiteboard Header / Toolbar
+          if (widget.isTeacher)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.white,
               border: Border(bottom: BorderSide(color: AppColors.slate200.withOpacity(0.8))),
@@ -347,22 +348,68 @@ class _DigitalBoardState extends State<DigitalBoard> {
                 ],
               ),
             ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: AppColors.slate200.withOpacity(0.8))),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.emerald500,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Live Whiteboard • Teacher is presenting',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.slate700,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.slate100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Page ${_currentPageIndex + 1} / ${_pages.length}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.slate600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
 
           // Canvas Area
           Expanded(
             child: ClipRect(
               child: GestureDetector(
-                onPanStart: (details) {
-                  final renderBox = context.findRenderObject() as RenderBox?;
-                  if (renderBox == null) return;
-                  final localPos = details.localPosition;
+                onPanStart: widget.isTeacher
+                    ? (details) {
+                        final renderBox = context.findRenderObject() as RenderBox?;
+                        if (renderBox == null) return;
+                        final localPos = details.localPosition;
 
-                  if (_activeTool == 'rectangle' || _activeTool == 'circle' || _activeTool == 'line') {
-                    setState(() {
-                      _shapeStart = localPos;
-                      _currentDrag = localPos;
-                    });
+                        if (_activeTool == 'rectangle' || _activeTool == 'circle' || _activeTool == 'line') {
+                          setState(() {
+                            _shapeStart = localPos;
+                            _currentDrag = localPos;
+                          });
                   } else {
                     final color = _activeTool == 'highlighter'
                         ? _selectedColor.withOpacity(0.35)
@@ -390,64 +437,69 @@ class _DigitalBoardState extends State<DigitalBoard> {
                       'isEnd': false,
                     });
                   }
-                },
-                onPanUpdate: (details) {
-                  final localPos = details.localPosition;
-                  if (_activeTool == 'rectangle' || _activeTool == 'circle' || _activeTool == 'line') {
-                    setState(() {
-                      _currentDrag = localPos;
-                    });
-                  } else {
-                    final color = _activeTool == 'highlighter'
-                        ? _selectedColor.withOpacity(0.35)
-                        : (_activeTool == 'eraser' ? Colors.white : _selectedColor);
-                    final width = _activeTool == 'eraser' ? 24.0 : (_activeTool == 'highlighter' ? 16.0 : _strokeWidth);
-                    final isEraser = _activeTool == 'eraser';
+                }
+              : null,
+                onPanUpdate: widget.isTeacher
+                    ? (details) {
+                        final localPos = details.localPosition;
+                        if (_activeTool == 'rectangle' || _activeTool == 'circle' || _activeTool == 'line') {
+                          setState(() {
+                            _currentDrag = localPos;
+                          });
+                        } else {
+                          final color = _activeTool == 'highlighter'
+                              ? _selectedColor.withOpacity(0.35)
+                              : (_activeTool == 'eraser' ? Colors.white : _selectedColor);
+                          final width = _activeTool == 'eraser' ? 24.0 : (_activeTool == 'highlighter' ? 16.0 : _strokeWidth);
+                          final isEraser = _activeTool == 'eraser';
 
-                    setState(() {
-                      final point = DrawingPoint(
-                        point: localPos,
-                        color: color,
-                        strokeWidth: width,
-                        isEraser: isEraser,
-                      );
-                      _pages[_currentPageIndex].add(point);
-                    });
+                          setState(() {
+                            final point = DrawingPoint(
+                              point: localPos,
+                              color: color,
+                              strokeWidth: width,
+                              isEraser: isEraser,
+                            );
+                            _pages[_currentPageIndex].add(point);
+                          });
 
-                    widget.onDrawStroke?.call({
-                      'x': localPos.dx,
-                      'y': localPos.dy,
-                      'color': color.value,
-                      'width': width,
-                      'isEraser': isEraser,
-                      'isEnd': false,
-                    });
-                  }
-                },
-                onPanEnd: (details) {
-                  if ((_activeTool == 'rectangle' || _activeTool == 'circle' || _activeTool == 'line') &&
-                      _shapeStart != null &&
-                      _currentDrag != null) {
-                    setState(() {
-                      // Generate points for the shape
-                      _generateShapePoints(_activeTool, _shapeStart!, _currentDrag!);
-                      _shapeStart = null;
-                      _currentDrag = null;
-                    });
-                  } else {
-                    setState(() {
-                      // Add sentinel null separator
-                      _pages[_currentPageIndex].add(const DrawingPoint(
-                        point: Offset(-1, -1),
-                        color: Colors.transparent,
-                        strokeWidth: 0,
-                      ));
-                    });
-                    widget.onDrawStroke?.call({
-                      'isEnd': true,
-                    });
-                  }
-                },
+                          widget.onDrawStroke?.call({
+                            'x': localPos.dx,
+                            'y': localPos.dy,
+                            'color': color.value,
+                            'width': width,
+                            'isEraser': isEraser,
+                            'isEnd': false,
+                          });
+                        }
+                      }
+                    : null,
+                onPanEnd: widget.isTeacher
+                    ? (details) {
+                        if ((_activeTool == 'rectangle' || _activeTool == 'circle' || _activeTool == 'line') &&
+                            _shapeStart != null &&
+                            _currentDrag != null) {
+                          setState(() {
+                            // Generate points for the shape
+                            _generateShapePoints(_activeTool, _shapeStart!, _currentDrag!);
+                            _shapeStart = null;
+                            _currentDrag = null;
+                          });
+                        } else {
+                          setState(() {
+                            // Add sentinel null separator
+                            _pages[_currentPageIndex].add(const DrawingPoint(
+                              point: Offset(-1, -1),
+                              color: Colors.transparent,
+                              strokeWidth: 0,
+                            ));
+                          });
+                          widget.onDrawStroke?.call({
+                            'isEnd': true,
+                          });
+                        }
+                      }
+                    : null,
                 child: CustomPaint(
                   size: Size.infinite,
                   painter: BoardPainter(
